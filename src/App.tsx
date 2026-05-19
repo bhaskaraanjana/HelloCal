@@ -208,10 +208,10 @@ export const App: React.FC = () => {
             src="/favicon.png" 
             alt="HaloCal Logo" 
             style={{ 
-              width: '32px', 
-              height: '32px', 
-              borderRadius: '8px', 
-              boxShadow: '0 0 12px rgba(139, 92, 246, 0.2)' 
+              width: '44px', 
+              height: '44px', 
+              borderRadius: '10px', 
+              boxShadow: '0 0 14px rgba(139, 92, 246, 0.22)' 
             }} 
           />
           <h1 className="logo-text">Halo<span>Cal</span></h1>
