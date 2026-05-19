@@ -177,13 +177,7 @@ export const App: React.FC = () => {
         <img 
           src="/favicon.png" 
           alt="HaloCal Logo" 
-          style={{ 
-            width: '64px', 
-            height: '64px', 
-            borderRadius: '16px', 
-            marginBottom: '1rem', 
-            boxShadow: '0 0 20px rgba(139, 92, 246, 0.25)' 
-          }} 
+          className="loading-logo"
         />
         <span>Powering HaloCal...</span>
       </div>
@@ -207,12 +201,7 @@ export const App: React.FC = () => {
           <img 
             src="/favicon.png" 
             alt="HaloCal Logo" 
-            style={{ 
-              width: '44px', 
-              height: '44px', 
-              borderRadius: '10px', 
-              boxShadow: '0 0 14px rgba(139, 92, 246, 0.22)' 
-            }} 
+            className="header-logo"
           />
           <h1 className="logo-text">Halo<span>Cal</span></h1>
         </div>

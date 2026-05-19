@@ -123,17 +123,37 @@ h1, h2, h3, h4, h5, h6 {
   gap: 0.75rem;
 }
 
-.logo-ring {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 3px solid var(--accent-purple);
-  box-shadow: 0 0 15px var(--accent-purple-glow);
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: glowPulse 2s infinite alternate;
+.header-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  transition: var(--transition-smooth);
+}
+
+.header-logo:hover {
+  transform: scale(1.06) rotate(3deg);
+  box-shadow: 0 0 28px rgba(139, 92, 246, 0.45);
+}
+
+.loading-logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.35);
+  animation: logoPulse 2s infinite alternate;
+}
+
+@keyframes logoPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.3);
+  }
+  100% {
+    transform: scale(1.06);
+    box-shadow: 0 0 42px rgba(139, 92, 246, 0.6);
+  }
 }
 
 .logo-text {
@@ -474,6 +494,13 @@ h1, h2, h3, h4, h5, h6 {
   .logo-container {
     justify-content: center !important;
     width: 100% !important;
+    gap: 0.85rem !important;
+  }
+
+  .header-logo {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
   }
 
   /* Sticky Bottom Navigation Bar Overlay */
