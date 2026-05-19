@@ -174,7 +174,17 @@ export const App: React.FC = () => {
         color: 'var(--text-secondary)',
         fontFamily: 'var(--font-display)'
       }}>
-        <div className="logo-ring" style={{ width: '60px', height: '60px', marginBottom: '1rem' }} />
+        <img 
+          src="/favicon.png" 
+          alt="HaloCal Logo" 
+          style={{ 
+            width: '64px', 
+            height: '64px', 
+            borderRadius: '16px', 
+            marginBottom: '1rem', 
+            boxShadow: '0 0 20px rgba(139, 92, 246, 0.25)' 
+          }} 
+        />
         <span>Powering HaloCal...</span>
       </div>
     );
@@ -194,15 +204,16 @@ export const App: React.FC = () => {
       {/* 1. Header Layout & Navigation Tabs */}
       <header className="header">
         <div className="logo-container">
-          <div className="logo-ring">
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--accent-purple)',
-              boxShadow: '0 0 10px var(--accent-purple)'
-            }} />
-          </div>
+          <img 
+            src="/favicon.png" 
+            alt="HaloCal Logo" 
+            style={{ 
+              width: '32px', 
+              height: '32px', 
+              borderRadius: '8px', 
+              boxShadow: '0 0 12px rgba(139, 92, 246, 0.2)' 
+            }} 
+          />
           <h1 className="logo-text">Halo<span>Cal</span></h1>
         </div>
 
