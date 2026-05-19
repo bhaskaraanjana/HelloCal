@@ -1,0 +1,396 @@
+import React, { useState } from 'react';
+import type { UserGoals, CoachPersonality } from '../types/nutrition';
+import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload } from 'lucide-react';
+
+interface SettingsProps {
+  apiKey: string;
+  personality: CoachPersonality;
+  goals: UserGoals;
+  onSaveKey: (key: string) => void;
+  onSavePersonality: (personality: CoachPersonality) => void;
+  onSaveGoals: (goals: UserGoals) => void;
+  onClearData: () => void;
+  onImportData: (jsonData: string) => boolean;
+  exportDataJson: string;
+}
+
+export const Settings: React.FC<SettingsProps> = ({
+  apiKey,
+  personality,
+  goals,
+  onSaveKey,
+  onSavePersonality,
+  onSaveGoals,
+  onClearData,
+  onImportData,
+  exportDataJson
+}) => {
+  const [keyInput, setKeyInput] = useState(apiKey);
+  const [showKey, setShowKey] = useState(false);
+  const [caloriesInput, setCaloriesInput] = useState(goals.calories);
+  const [proteinInput, setProteinInput] = useState(goals.protein);
+  const [carbsInput, setCarbsInput] = useState(goals.carbs);
+  const [fatInput, setFatInput] = useState(goals.fat);
+
+  const [saveStatus, setSaveStatus] = useState<{ [key: string]: boolean }>({});
+
+  const triggerSaveStatus = (key: string) => {
+    setSaveStatus(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setSaveStatus(prev => ({ ...prev, [key]: false }));
+    }, 2000);
+  };
+
+  const handleSaveKey = () => {
+    onSaveKey(keyInput);
+    triggerSaveStatus('key');
+  };
+
+  const handleSaveGoals = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSaveGoals({
+      calories: Number(caloriesInput) || 2000,
+      protein: Number(proteinInput) || 130,
+      carbs: Number(carbsInput) || 220,
+      fat: Number(fatInput) || 65
+    });
+    triggerSaveStatus('goals');
+  };
+
+  const handleSelectPersonality = (p: CoachPersonality) => {
+    onSavePersonality(p);
+    triggerSaveStatus('personality');
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([exportDataJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `halocal_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      const success = onImportData(content);
+      if (success) {
+        alert('Data successfully imported and active! Reloading...');
+        window.location.reload();
+      } else {
+        alert('Failed to import data. Please verify the JSON file structure.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleResetWithConfirmation = () => {
+    if (confirm('CAUTION: Are you absolutely sure you want to wipe all logs, calorie goals, and API keys? This operation is irreversible!')) {
+      onClearData();
+      alert('All local database items have been purged.');
+      window.location.reload();
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+      
+      {/* 1. API Configuration */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <h3 style={{
+          fontSize: '1.15rem',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          borderBottom: '1px solid rgba(255,255,255,0.03)',
+          paddingBottom: '0.5rem'
+        }}>
+          <Key size={18} color="var(--accent-purple)" />
+          AI Supermode Key Setup
+        </h3>
+        
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+          HaloCal processes standard transcripts offline. However, to unlock the <strong>Multimodal Microphone Recording</strong> (whisper tracking, auto serving-sizes, conversational coaching), you must enter a Gemini API Key. 
+          You can get a free personal API key in seconds from the <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-purple)', textDecoration: 'none', fontWeight: 650 }}>Google AI Studio Portal</a>.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input 
+                type={showKey ? 'text' : 'password'}
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                placeholder="Paste your Gemini API key (AIzaSy...)"
+                style={{
+                  width: '100%',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '12px',
+                  padding: '0.75rem 2.5rem 0.75rem 1rem',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontFamily: 'monospace',
+                  fontSize: '0.9rem'
+                }}
+              />
+              <button 
+                onClick={() => setShowKey(!showKey)}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <button onClick={handleSaveKey} className="btn btn-primary" style={{ padding: '0.75rem 1.25rem' }}>
+              {saveStatus['key'] ? 'Saved!' : 'Save Key'}
+            </button>
+          </div>
+          
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            🔑 Don't have a key? Find and generate your free Gemini API key in 10 seconds at: 
+            <a 
+              href="https://aistudio.google.com/api-keys" 
+              target="_blank" 
+              rel="noreferrer" 
+              style={{ 
+                color: 'var(--accent-purple)', 
+                textDecoration: 'underline', 
+                fontWeight: 650 
+              }}
+            >
+              Google AI Studio Keys ↗
+            </a>
+          </span>
+        </div>
+      </div>
+
+      {/* 2. Personalities Selector */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <h3 style={{
+          fontSize: '1.15rem',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          borderBottom: '1px solid rgba(255,255,255,0.03)',
+          paddingBottom: '0.5rem'
+        }}>
+          <Sparkles size={18} color="var(--accent-teal)" style={{ animation: 'float 2s infinite' }} />
+          Select AI Coach Tone
+        </h3>
+        
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+          gap: '0.75rem'
+        }}>
+          {([
+            { id: 'encouraging', label: 'Warm Coach', desc: 'Positive, motivating, congratulatory, very gentle on diet slips.' },
+            { id: 'strict', label: 'Strict Trainer', desc: 'Direct, no-nonsense. Demands high protein, alerts on junk sugars.' },
+            { id: 'analytical', label: 'Scientist', desc: 'Analytical, objective facts. Focuses on fiber, glycemic loads, biology.' },
+            { id: 'chill', label: 'Chill Buddy', desc: 'Super relaxed, laidback, casual high-fives and zero food guilt.' }
+          ] as const).map(p => (
+            <button
+              key={p.id}
+              onClick={() => handleSelectPersonality(p.id)}
+              style={{
+                background: personality === p.id ? 'rgba(139, 92, 246, 0.08)' : 'rgba(255,255,255,0.01)',
+                border: personality === p.id ? '1px solid var(--accent-purple)' : '1px solid var(--border-glass)',
+                borderRadius: '16px',
+                padding: '1.25rem 1rem',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+                boxShadow: personality === p.id ? '0 0 15px rgba(139, 92, 246, 0.1)' : 'none',
+                transition: 'var(--transition-smooth)'
+              }}
+              onMouseEnter={(e) => {
+                if (personality !== p.id) {
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (personality !== p.id) {
+                  e.currentTarget.style.borderColor = 'var(--border-glass)';
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)';
+                }
+              }}
+            >
+              <span style={{ 
+                fontSize: '0.95rem', 
+                fontWeight: 700, 
+                fontFamily: 'var(--font-display)',
+                color: personality === p.id ? 'var(--accent-purple)' : 'var(--text-primary)'
+              }}>
+                {p.label}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
+                {p.desc}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. Goal Managers */}
+      <div className="glass-card">
+        <h3 style={{
+          fontSize: '1.15rem',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          borderBottom: '1px solid rgba(255,255,255,0.03)',
+          paddingBottom: '0.5rem',
+          marginBottom: '1.25rem'
+        }}>
+          <Goal size={18} color="var(--accent-amber)" />
+          Configure Daily Targets
+        </h3>
+
+        <form onSubmit={handleSaveGoals} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
+            {/* Calories Limit */}
+            <div className="input-group">
+              <label className="input-label">Calories Budget (kcal)</label>
+              <input 
+                type="number" 
+                value={caloriesInput} 
+                onChange={(e) => setCaloriesInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+            
+            {/* Protein Goal */}
+            <div className="input-group">
+              <label className="input-label">Protein Goal (g)</label>
+              <input 
+                type="number" 
+                value={proteinInput} 
+                onChange={(e) => setProteinInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+            
+            {/* Carbs Goal */}
+            <div className="input-group">
+              <label className="input-label">Carbs Goal (g)</label>
+              <input 
+                type="number" 
+                value={carbsInput} 
+                onChange={(e) => setCarbsInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+            
+            {/* Fat Goal */}
+            <div className="input-group">
+              <label className="input-label">Fats Goal (g)</label>
+              <input 
+                type="number" 
+                value={fatInput} 
+                onChange={(e) => setFatInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            className="btn btn-primary" 
+            style={{ 
+              alignSelf: 'flex-start',
+              padding: '0.75rem 1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            {saveStatus['goals'] ? 'Goals Locked!' : 'Lock Target Budgets'}
+          </button>
+        </form>
+      </div>
+
+      {/* 4. Data Center */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <h3 style={{
+          fontSize: '1.15rem',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          borderBottom: '1px solid rgba(255,255,255,0.03)',
+          paddingBottom: '0.5rem'
+        }}>
+          <ShieldAlert size={18} color="var(--accent-rose)" />
+          Backup & Device Integrity Center
+        </h3>
+
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          All food timelines, targets, and API credentials are kept strictly in this web browser's local sandbox memory (`localStorage`). None of this data is sent to external clouds or servers. You can backup your logs locally, or reset the app here.
+        </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+          {/* Export button */}
+          <button 
+            onClick={handleExport} 
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}
+          >
+            <HardDriveDownload size={16} /> Export Backup JSON
+          </button>
+
+          {/* Import input trigger */}
+          <label 
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer' }}
+          >
+            <HardDriveUpload size={16} /> Restore Backup JSON
+            <input 
+              type="file" 
+              accept=".json" 
+              onChange={handleImport} 
+              style={{ display: 'none' }}
+            />
+          </label>
+
+          {/* Purge button */}
+          <button 
+            onClick={handleResetWithConfirmation} 
+            className="btn btn-danger"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', marginLeft: 'auto' }}
+          >
+            Wipe Local Data
+          </button>
+        </div>
+      </div>
+
+    </div>
+  );
+};
+export default Settings;
