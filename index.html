@@ -17,13 +17,25 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration & Live Auto-Update System -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('Service Worker active. Scope:', reg.scope))
+            .then((reg) => {
+              console.log('Service Worker active. Scope:', reg.scope);
+              // Force browser to check if there is an update to sw.js immediately on page load
+              reg.update();
+            })
             .catch((err) => console.error('Service Worker registration failed:', err));
+        });
+
+        // Detect service worker updates and auto-reload open tabs immediately to display the new version
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
         });
       }
     </script>
