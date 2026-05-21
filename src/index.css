@@ -35,6 +35,67 @@
   --transition-spring: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+/* Cyberpunk Theme Aura */
+body.theme-cyberpunk {
+  --bg-primary: #0a0115;
+  --bg-secondary: #130325;
+  --bg-glass: rgba(19, 3, 37, 0.72);
+  --bg-glass-hover: rgba(26, 4, 50, 0.82);
+  --border-glass-glow: rgba(236, 72, 153, 0.25);
+  
+  --accent-purple: #d946ef;
+  --accent-purple-glow: rgba(217, 70, 239, 0.35);
+  --accent-teal: #f43f5e;
+  --accent-teal-glow: rgba(244, 63, 94, 0.35);
+  --accent-blue: #ec4899;
+  --accent-blue-glow: rgba(236, 72, 153, 0.35);
+  
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(217, 70, 239, 0.07) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(244, 63, 94, 0.07) 0%, transparent 40%);
+}
+
+/* Deep Ocean Theme Aura */
+body.theme-ocean {
+  --bg-primary: #010a15;
+  --bg-secondary: #031427;
+  --bg-glass: rgba(3, 20, 39, 0.72);
+  --bg-glass-hover: rgba(4, 28, 55, 0.82);
+  --border-glass-glow: rgba(14, 165, 233, 0.25);
+  
+  --accent-purple: #0ea5e9;
+  --accent-purple-glow: rgba(14, 165, 233, 0.35);
+  --accent-teal: #38bdf8;
+  --accent-teal-glow: rgba(56, 189, 248, 0.35);
+  --accent-blue: #0284c7;
+  --accent-blue-glow: rgba(2, 132, 199, 0.35);
+  
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.07) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(2, 132, 199, 0.07) 0%, transparent 40%);
+}
+
+/* Emerald Green Theme Aura */
+body.theme-emerald {
+  --bg-primary: #010a05;
+  --bg-secondary: #031c10;
+  --bg-glass: rgba(3, 28, 16, 0.72);
+  --bg-glass-hover: rgba(4, 38, 22, 0.82);
+  --border-glass-glow: rgba(16, 185, 129, 0.25);
+  
+  --accent-purple: #10b981;
+  --accent-purple-glow: rgba(16, 185, 129, 0.35);
+  --accent-teal: #34d399;
+  --accent-teal-glow: rgba(52, 211, 153, 0.35);
+  --accent-blue: #059669;
+  --accent-blue-glow: rgba(5, 150, 105, 0.35);
+  
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.07) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(5, 150, 105, 0.07) 0%, transparent 40%);
+}
+
+
 /* Base Settings */
 * {
   box-sizing: border-box;

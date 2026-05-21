@@ -1,11 +1,12 @@
-import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings } from '../types/nutrition';
 
 const KEYS = {
   LOGS: 'halocal_logs',
   WORKOUTS: 'halocal_workouts',
   GOALS: 'halocal_goals',
   GEMINI_KEY: 'halocal_gemini_key',
-  COACH: 'halocal_coach'
+  COACH: 'halocal_coach',
+  SETTINGS: 'halocal_app_settings'
 };
 
 const DEFAULT_GOALS: UserGoals = {
@@ -18,6 +19,28 @@ const DEFAULT_GOALS: UserGoals = {
   sodium: 2300
 };
 
+const DEFAULT_SETTINGS: AppSettings = {
+  theme: 'obsidian',
+  visibleMacros: {
+    protein: true,
+    carbs: true,
+    fat: true
+  },
+  visibleMicros: {
+    addedSugar: true,
+    fiber: true,
+    sodium: true
+  },
+  visibleWidgets: {
+    calorieHalo: true,
+    macros: true,
+    micros: true,
+    workouts: true,
+    mealSlots: true,
+    goalCompletion: true
+  }
+};
+
 export const storage = {
   getData(): StorageData {
     try {
@@ -26,18 +49,30 @@ export const storage = {
       const goalsRaw = localStorage.getItem(KEYS.GOALS);
       const keyRaw = localStorage.getItem(KEYS.GEMINI_KEY);
       const coachRaw = localStorage.getItem(KEYS.COACH);
+      const settingsRaw = localStorage.getItem(KEYS.SETTINGS);
 
       let parsedGoals = goalsRaw ? JSON.parse(goalsRaw) : DEFAULT_GOALS;
       if (parsedGoals.addedSugar === undefined) parsedGoals.addedSugar = DEFAULT_GOALS.addedSugar;
       if (parsedGoals.fiber === undefined) parsedGoals.fiber = DEFAULT_GOALS.fiber;
       if (parsedGoals.sodium === undefined) parsedGoals.sodium = DEFAULT_GOALS.sodium;
 
+      let parsedSettings = settingsRaw ? JSON.parse(settingsRaw) : DEFAULT_SETTINGS;
+      // Handle deep merging safely to handle progressive configuration structure updates
+      parsedSettings = {
+        ...DEFAULT_SETTINGS,
+        ...parsedSettings,
+        visibleMacros: { ...DEFAULT_SETTINGS.visibleMacros, ...(parsedSettings.visibleMacros || {}) },
+        visibleMicros: { ...DEFAULT_SETTINGS.visibleMicros, ...(parsedSettings.visibleMicros || {}) },
+        visibleWidgets: { ...DEFAULT_SETTINGS.visibleWidgets, ...(parsedSettings.visibleWidgets || {}) }
+      };
+
       return {
         logs: logsRaw ? JSON.parse(logsRaw) : [],
         workouts: workoutsRaw ? JSON.parse(workoutsRaw) : [],
         goals: parsedGoals,
         geminiKey: keyRaw ? atob(keyRaw) : '',
-        coachPersonality: (coachRaw as CoachPersonality) || 'encouraging'
+        coachPersonality: (coachRaw as CoachPersonality) || 'encouraging',
+        appSettings: parsedSettings
       };
     } catch (e) {
       console.error('Error reading from localStorage', e);
@@ -46,7 +81,8 @@ export const storage = {
         workouts: [],
         goals: DEFAULT_GOALS,
         geminiKey: '',
-        coachPersonality: 'encouraging'
+        coachPersonality: 'encouraging',
+        appSettings: DEFAULT_SETTINGS
       };
     }
   },
@@ -72,11 +108,17 @@ export const storage = {
     localStorage.setItem(KEYS.COACH, coach);
   },
 
+  saveAppSettings(settings: AppSettings): void {
+    localStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+  },
+
   clearAll(): void {
     localStorage.removeItem(KEYS.LOGS);
     localStorage.removeItem(KEYS.WORKOUTS);
     localStorage.removeItem(KEYS.GOALS);
     localStorage.removeItem(KEYS.GEMINI_KEY);
     localStorage.removeItem(KEYS.COACH);
+    localStorage.removeItem(KEYS.SETTINGS);
   }
 };
+

@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse } from '../types/nutrition';
+import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse, UserGoals, AppSettings, CommandResponse } from '../types/nutrition';
 
 // Helper to convert Blob to Base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -63,6 +63,69 @@ Acknowledge the foods and/or exercises logged, comment on protein, fiber, or add
 - "strict": No-excuses trainer mode. Pushes for high protein, warns directly about high added sugar, calls out exercise slacking or praises hard burn briefly.
 - "analytical": Scientific, objective, mentions glycemic impact, MET value for exercise, fiber, sodium, or exact metabolic details. No fluff.
 - "chill": Extremely relaxed, casual buddy tone. "Hey, awesome job on that workout, keep doing your thing, looks delicious!"
+`;
+
+const APP_COMMAND_PROMPT = `
+You are the AI Command Center of HaloCal. The user has clicked a dashboard card or triggered the dynamic customize button, requesting a custom UI modification, a theme change, an active widget toggle, or a numeric target goal change (by voice or text).
+Your task is to analyze their request, review their current goals and settings, and determine the exact updates required.
+
+Available Themes:
+- "obsidian" (Default dark, obsidian-black glassmorphic styling)
+- "cyberpunk" (Vibrant neon pink, magenta, and dark purple aura theme)
+- "ocean" (Deep maritime blue, sky blue, and glowing azure theme)
+- "emerald" (Lush forest green, glowing emerald details, and mint accents)
+
+Available Progress Counters within Cards to Show/Hide:
+- macronutrients: "protein", "carbs", "fat" (under visibleMacros)
+- micronutrients: "addedSugar", "fiber", "sodium" (under visibleMicros)
+
+Available Cards (Widgets) to Show/Hide (under visibleWidgets):
+- "calorieHalo" (The daily progress ring card)
+- "macros" (Macronutrient target levels card)
+- "micros" (Micronutrient dashboard target card)
+- "workouts" (Logged exercises list widget)
+- "mealSlots" (🍳 B, 🍱 L, 🥗 D counts summary)
+- "goalCompletion" (Percentage target progress card)
+
+Numeric Targets you can update (inside updatedGoals):
+- calories (kcal), protein (g), carbs (g), fat (g), addedSugar (g), fiber (g), sodium (mg).
+
+You MUST respond with a JSON object matching this exact structure:
+{
+  "updatedGoals": {
+    // Include ONLY targets that were modified by this command. E.g. {"protein": 150} if the user said "make protein goal 150g". Do not include unmodified fields.
+  },
+  "updatedSettings": {
+    // Include ONLY settings that were modified by this command.
+    "theme": "obsidian" | "cyberpunk" | "ocean" | "emerald",
+    "visibleMacros": {
+      "protein": true/false,
+      "carbs": true/false,
+      "fat": true/false
+    },
+    "visibleMicros": {
+      "addedSugar": true/false,
+      "fiber": true/false,
+      "sodium": true/false
+    },
+    "visibleWidgets": {
+      "calorieHalo": true/false,
+      "macros": true/false,
+      "micros": true/false,
+      "workouts": true/false,
+      "mealSlots": true/false,
+      "goalCompletion": true/false
+    }
+  },
+  "aiResponse": "A friendly, extremely concise confirmation message detailing exactly what you changed (e.g. 'Got it! I've activated Cyberpunk Neon mode. Enjoy the vibrant pink glows!'). Keep it natural, confident, and tailored."
+}
+
+Interpretations:
+- If they say "hide fats counter", set visibleMacros.fat to false.
+- If they say "add sodium counter to macros", set visibleMicros.sodium to true (since sodium is tracked as a micronutrient) and explain it in the aiResponse.
+- If they say "switch to green layout", set theme to "emerald".
+- If they say "show all cards", set all booleans inside visibleWidgets to true.
+- If they say "hide stats card", set visibleWidgets.mealSlots and/or goalCompletion to false.
 `;
 
 export const gemini = {
@@ -300,5 +363,59 @@ Requested personality: "${personality}".
       console.error('Error applying text correction with Gemini:', error);
       throw error;
     }
+  },
+
+  async executeAppCommand(
+    text: string,
+    voiceBlob: Blob | null,
+    currentGoals: UserGoals,
+    currentSettings: AppSettings,
+    apiKey: string
+  ): Promise<CommandResponse> {
+    if (!apiKey) {
+      throw new Error('Gemini API Key is required to run the AI Dashboard Customizer.');
+    }
+
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const promptText = `
+The current user target goals: ${JSON.stringify(currentGoals, null, 2)}
+The current dashboard visual configurations: ${JSON.stringify(currentSettings, null, 2)}
+
+Interpret the user's design command and output the updated layout details.
+      `;
+
+      const contentParts: any[] = [];
+
+      if (voiceBlob) {
+        const base64Audio = await blobToBase64(voiceBlob);
+        contentParts.push({
+          inlineData: {
+            data: base64Audio,
+            mimeType: voiceBlob.type || 'audio/webm'
+          }
+        });
+      }
+
+      const queryText = text ? `User command text: "${text}"` : `User command voice audio.`;
+      contentParts.push({
+        text: `${APP_COMMAND_PROMPT}\n\n${promptText}\n\n${queryText}`
+      });
+
+      const result = await model.generateContent(contentParts);
+      const responseText = result.response.text();
+      return JSON.parse(responseText) as CommandResponse;
+    } catch (error) {
+      console.error('Error executing AI layout command:', error);
+      throw error;
+    }
   }
 };
+

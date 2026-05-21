@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse } from './types/nutrition';
+import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings } from './types/nutrition';
 import { storage } from './services/storage';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -9,6 +9,7 @@ import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
 import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
 
 export const App: React.FC = () => {
   // 1. Core States loaded from localStorage on mount
@@ -17,6 +18,16 @@ export const App: React.FC = () => {
   const [goals, setGoals] = useState<UserGoals>({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300 });
   const [geminiKey, setGeminiKey] = useState('');
   const [coachPersonality, setCoachPersonality] = useState<CoachPersonality>('encouraging');
+
+  // Dashboard Dynamic Customizer Layout settings state
+  const [appSettings, setAppSettings] = useState<AppSettings>({
+    theme: 'obsidian',
+    visibleMacros: { protein: true, carbs: true, fat: true },
+    visibleMicros: { addedSugar: true, fiber: true, sodium: true },
+    visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: true, mealSlots: true, goalCompletion: true }
+  });
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  const [customizerScope, setCustomizerScope] = useState<'general' | 'macronutrients' | 'micronutrients' | 'widgets'>('general');
 
   // Loading indicator on first mount
   const [isLoaded, setIsLoaded] = useState(false);
@@ -42,8 +53,16 @@ export const App: React.FC = () => {
     setGoals(data.goals);
     setGeminiKey(data.geminiKey);
     setCoachPersonality(data.coachPersonality);
+    if (data.appSettings) {
+      setAppSettings(data.appSettings);
+    }
     setIsLoaded(true);
   }, []);
+
+  // Sync theme class onto document.body whenever theme state updates
+  useEffect(() => {
+    document.body.className = `theme-${appSettings.theme}`;
+  }, [appSettings.theme]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -195,6 +214,10 @@ export const App: React.FC = () => {
         }
         if (parsed.geminiKey) storage.saveGeminiKey(parsed.geminiKey);
         if (parsed.coachPersonality) storage.saveCoach(parsed.coachPersonality);
+        if (parsed.appSettings) {
+          storage.saveAppSettings(parsed.appSettings);
+          setAppSettings(parsed.appSettings);
+        }
         return true;
       }
       return false;
@@ -211,6 +234,59 @@ export const App: React.FC = () => {
     setGoals({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300 });
     setGeminiKey('');
     setCoachPersonality('encouraging');
+    setAppSettings({
+      theme: 'obsidian',
+      visibleMacros: { protein: true, carbs: true, fat: true },
+      visibleMicros: { addedSugar: true, fiber: true, sodium: true },
+      visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: true, mealSlots: true, goalCompletion: true }
+    });
+  };
+
+  // Callback handler for AI customization actions
+  const handleCustomizationSuccess = (
+    updatedGoals: Partial<UserGoals>,
+    updatedSettings: Partial<AppSettings>,
+    message: string
+  ) => {
+    let newGoals = { ...goals };
+    if (Object.keys(updatedGoals).length > 0) {
+      newGoals = { ...goals, ...updatedGoals };
+      setGoals(newGoals);
+      storage.saveGoals(newGoals);
+    }
+
+    let newSettings = { ...appSettings };
+    if (Object.keys(updatedSettings).length > 0) {
+      newSettings = {
+        ...appSettings,
+        ...updatedSettings,
+        visibleMacros: {
+          ...appSettings.visibleMacros,
+          ...(updatedSettings.visibleMacros || {})
+        },
+        visibleMicros: {
+          ...appSettings.visibleMicros,
+          ...(updatedSettings.visibleMicros || {})
+        },
+        visibleWidgets: {
+          ...appSettings.visibleWidgets,
+          ...(updatedSettings.visibleWidgets || {})
+        }
+      };
+      if (updatedSettings.theme) {
+        newSettings.theme = updatedSettings.theme;
+      }
+      setAppSettings(newSettings);
+      storage.saveAppSettings(newSettings);
+    }
+
+    triggerToast(message);
+    confetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
+  };
+
+  const handleTriggerCustomize = (scope: 'general' | 'macronutrients' | 'micronutrients' | 'widgets') => {
+    setCustomizerScope(scope);
+    setCustomizerOpen(true);
   };
 
   if (!isLoaded) {
@@ -241,7 +317,8 @@ export const App: React.FC = () => {
     workouts,
     goals,
     geminiKey,
-    coachPersonality
+    coachPersonality,
+    appSettings
   });
 
   return (
@@ -307,7 +384,13 @@ export const App: React.FC = () => {
       {/* 3. Dynamic Tab Portals */}
       <main style={{ flex: 1, marginBottom: '3rem' }}>
         {activeTab === 'dashboard' && (
-          <Dashboard logs={logs} workouts={workouts} goals={goals} />
+          <Dashboard 
+            logs={logs} 
+            workouts={workouts} 
+            goals={goals} 
+            appSettings={appSettings}
+            onTriggerCustomize={handleTriggerCustomize}
+          />
         )}
         
         {activeTab === 'timeline' && (
@@ -361,6 +444,18 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 5.5. AI Customizer Bottom Sheet Drawer */}
+      <AiCustomizerDrawer
+        isOpen={customizerOpen}
+        onClose={() => setCustomizerOpen(false)}
+        currentGoals={goals}
+        currentSettings={appSettings}
+        apiKey={geminiKey}
+        scope={customizerScope}
+        onCustomizationSuccess={handleCustomizationSuccess}
+        onError={(msg) => triggerToast(msg)}
+      />
 
       {/* 6. Footer Signature */}
       <footer style={{

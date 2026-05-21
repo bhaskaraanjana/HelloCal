@@ -39,12 +39,41 @@ export interface UserGoals {
   sodium?: number;     // target limit in milligrams
 }
 
+export interface AppSettings {
+  theme: 'obsidian' | 'cyberpunk' | 'ocean' | 'emerald';
+  visibleMacros: {
+    protein: boolean;
+    carbs: boolean;
+    fat: boolean;
+  };
+  visibleMicros: {
+    addedSugar: boolean;
+    fiber: boolean;
+    sodium: boolean;
+  };
+  visibleWidgets: {
+    calorieHalo: boolean;
+    macros: boolean;
+    micros: boolean;
+    workouts: boolean;
+    mealSlots: boolean;
+    goalCompletion: boolean;
+  };
+}
+
+export interface CommandResponse {
+  updatedGoals?: Partial<UserGoals>;
+  updatedSettings?: Partial<AppSettings>;
+  aiResponse: string;
+}
+
 export interface StorageData {
   logs: MealLog[];
   workouts: WorkoutLog[];
   goals: UserGoals;
   geminiKey: string;
   coachPersonality: CoachPersonality;
+  appSettings?: AppSettings;
 }
 
 export type CoachPersonality = 'encouraging' | 'strict' | 'analytical' | 'chill';
@@ -55,3 +84,4 @@ export interface CoachResponse {
   workout?: Omit<WorkoutLog, 'id'>;
   coachingMessage: string;
 }
+
