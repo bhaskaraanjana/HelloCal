@@ -1,7 +1,8 @@
-import type { MealLog, UserGoals, CoachPersonality, StorageData } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData } from '../types/nutrition';
 
 const KEYS = {
   LOGS: 'halocal_logs',
+  WORKOUTS: 'halocal_workouts',
   GOALS: 'halocal_goals',
   GEMINI_KEY: 'halocal_gemini_key',
   COACH: 'halocal_coach'
@@ -11,27 +12,38 @@ const DEFAULT_GOALS: UserGoals = {
   calories: 2000,
   protein: 130,
   carbs: 220,
-  fat: 65
+  fat: 65,
+  addedSugar: 30,
+  fiber: 30,
+  sodium: 2300
 };
 
 export const storage = {
   getData(): StorageData {
     try {
       const logsRaw = localStorage.getItem(KEYS.LOGS);
+      const workoutsRaw = localStorage.getItem(KEYS.WORKOUTS);
       const goalsRaw = localStorage.getItem(KEYS.GOALS);
       const keyRaw = localStorage.getItem(KEYS.GEMINI_KEY);
       const coachRaw = localStorage.getItem(KEYS.COACH);
 
+      let parsedGoals = goalsRaw ? JSON.parse(goalsRaw) : DEFAULT_GOALS;
+      if (parsedGoals.addedSugar === undefined) parsedGoals.addedSugar = DEFAULT_GOALS.addedSugar;
+      if (parsedGoals.fiber === undefined) parsedGoals.fiber = DEFAULT_GOALS.fiber;
+      if (parsedGoals.sodium === undefined) parsedGoals.sodium = DEFAULT_GOALS.sodium;
+
       return {
         logs: logsRaw ? JSON.parse(logsRaw) : [],
-        goals: goalsRaw ? JSON.parse(goalsRaw) : DEFAULT_GOALS,
-        geminiKey: keyRaw ? atob(keyRaw) : '', // Simple base64 encode for API key to avoid raw text in plain local storage inspects
+        workouts: workoutsRaw ? JSON.parse(workoutsRaw) : [],
+        goals: parsedGoals,
+        geminiKey: keyRaw ? atob(keyRaw) : '',
         coachPersonality: (coachRaw as CoachPersonality) || 'encouraging'
       };
     } catch (e) {
       console.error('Error reading from localStorage', e);
       return {
         logs: [],
+        workouts: [],
         goals: DEFAULT_GOALS,
         geminiKey: '',
         coachPersonality: 'encouraging'
@@ -43,12 +55,15 @@ export const storage = {
     localStorage.setItem(KEYS.LOGS, JSON.stringify(logs));
   },
 
+  saveWorkouts(workouts: WorkoutLog[]): void {
+    localStorage.setItem(KEYS.WORKOUTS, JSON.stringify(workouts));
+  },
+
   saveGoals(goals: UserGoals): void {
     localStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
   },
 
   saveGeminiKey(key: string): void {
-    // Basic obfuscation to avoid raw string inspect, and trim whitespace
     const cleanKey = key.trim();
     localStorage.setItem(KEYS.GEMINI_KEY, btoa(cleanKey));
   },
@@ -59,6 +74,7 @@ export const storage = {
 
   clearAll(): void {
     localStorage.removeItem(KEYS.LOGS);
+    localStorage.removeItem(KEYS.WORKOUTS);
     localStorage.removeItem(KEYS.GOALS);
     localStorage.removeItem(KEYS.GEMINI_KEY);
     localStorage.removeItem(KEYS.COACH);

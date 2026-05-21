@@ -31,6 +31,9 @@ export const Settings: React.FC<SettingsProps> = ({
   const [proteinInput, setProteinInput] = useState(goals.protein);
   const [carbsInput, setCarbsInput] = useState(goals.carbs);
   const [fatInput, setFatInput] = useState(goals.fat);
+  const [addedSugarInput, setAddedSugarInput] = useState(goals.addedSugar || 30);
+  const [fiberInput, setFiberInput] = useState(goals.fiber || 30);
+  const [sodiumInput, setSodiumInput] = useState(goals.sodium || 2300);
 
   const [saveStatus, setSaveStatus] = useState<{ [key: string]: boolean }>({});
 
@@ -52,7 +55,10 @@ export const Settings: React.FC<SettingsProps> = ({
       calories: Number(caloriesInput) || 2000,
       protein: Number(proteinInput) || 130,
       carbs: Number(carbsInput) || 220,
-      fat: Number(fatInput) || 65
+      fat: Number(fatInput) || 65,
+      addedSugar: Number(addedSugarInput) || 30,
+      fiber: Number(fiberInput) || 30,
+      sodium: Number(sodiumInput) || 2300
     });
     triggerSaveStatus('goals');
   };
@@ -314,6 +320,53 @@ export const Settings: React.FC<SettingsProps> = ({
                 type="number" 
                 value={fatInput} 
                 onChange={(e) => setFatInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-display)',
+            borderTop: '1px dashed rgba(255,255,255,0.06)',
+            paddingTop: '0.75rem',
+            marginTop: '0.25rem'
+          }}>
+            🎯 Daily Micronutrient Budgets
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
+            {/* Added Sugar Limit */}
+            <div className="input-group">
+              <label className="input-label">Added Sugar Limit (g)</label>
+              <input 
+                type="number" 
+                value={addedSugarInput} 
+                onChange={(e) => setAddedSugarInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+
+            {/* Dietary Fiber Target */}
+            <div className="input-group">
+              <label className="input-label">Dietary Fiber Target (g)</label>
+              <input 
+                type="number" 
+                value={fiberInput} 
+                onChange={(e) => setFiberInput(parseInt(e.target.value) || 0)}
+                className="input-field"
+              />
+            </div>
+
+            {/* Sodium Limit */}
+            <div className="input-group">
+              <label className="input-label">Sodium Limit (mg)</label>
+              <input 
+                type="number" 
+                value={sodiumInput} 
+                onChange={(e) => setSodiumInput(parseInt(e.target.value) || 0)}
                 className="input-field"
               />
             </div>

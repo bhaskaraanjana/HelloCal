@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Mic, MicOff, Send, Sparkles, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera } from 'lucide-react';
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
 import type { CoachPersonality, CoachResponse } from '../types/nutrition';
@@ -23,6 +23,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Start Voice Recording
   const startRecording = async () => {
@@ -38,14 +39,12 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // WebM is widely supported, fall back to wav/ogg if webm fails or is unsupported
       const options = { mimeType: 'audio/webm' };
       let recorder: MediaRecorder;
       
       try {
         recorder = new MediaRecorder(stream, options);
       } catch (e) {
-        // Fallback for Safari/iOS which might prefer standard audio stream recording
         recorder = new MediaRecorder(stream);
       }
 
@@ -58,7 +57,6 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       };
 
       recorder.onstop = async () => {
-        // Stop all audio tracks to release microphone hardware icon
         stream.getTracks().forEach((track) => track.stop());
         
         const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
@@ -71,7 +69,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         await processAudio(audioBlob);
       };
 
-      recorder.start(250); // capture chunks every 250ms
+      recorder.start(250);
       setStatus('recording');
     } catch (err: any) {
       console.error('Error accessing microphone:', err);
@@ -93,8 +91,6 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   // Upload/Process Audio Blob
   const processAudio = async (blob: Blob) => {
     if (!apiKey) {
-      // Local fallback: we need a transcript to run localParser. 
-      // We warn the user that they need an API Key for direct multimodal audio processing
       setStatus('idle');
       const errorMsg = 'Gemini API Key is required to process audio logs. Please enter a key in Settings, or type your meals below!';
       setMicError(errorMsg);
@@ -113,6 +109,35 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   };
 
+  // Process Photo Selection / Native Camera Upload
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!apiKey) {
+      const errorMsg = 'Gemini API Key is required for visual food photo scanning. Please enter a key in Settings!';
+      setMicError(errorMsg);
+      onError(errorMsg);
+      return;
+    }
+
+    setStatus('processing');
+    setMicError(null);
+
+    try {
+      const parsedData = await gemini.parseImage(file, apiKey, personality);
+      onParsingSuccess(parsedData);
+    } catch (err: any) {
+      console.error('Gemini Photo Error:', err);
+      onError(err.message || 'Failed to parse image. Please take a clearer picture or try again.');
+    } finally {
+      setStatus('idle');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''; // Reset uploader input
+      }
+    }
+  };
+
   // Process Text Inputs
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,11 +150,9 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
     try {
       if (apiKey) {
-        // Super mode text parsing
         const parsedData = await gemini.parseText(query, apiKey, personality);
         onParsingSuccess(parsedData);
       } else {
-        // Smart offline local parsing
         const parsedData = localParser.parseText(query);
         onParsingSuccess(parsedData);
       }
@@ -144,7 +167,17 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
       
-      {/* Voice Pill Logging Area */}
+      {/* Hidden File Input for Native PWA Camera Uploader */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        accept="image/*" 
+        capture="environment" 
+        onChange={handleImageSelect} 
+        style={{ display: 'none' }} 
+      />
+
+      {/* Logging Area Card */}
       <div 
         className="glass-card" 
         style={{
@@ -162,7 +195,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           overflow: 'hidden'
         }}
       >
-        {/* Glow circles behind the mic button */}
+        {/* Glow circles behind buttons */}
         {status === 'recording' && (
           <div style={{
             position: 'absolute',
@@ -177,15 +210,19 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         {/* Text Guidelines */}
         <div style={{ zIndex: 1 }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-            {status === 'idle' && 'Log Your Meal'}
+            {status === 'idle' && 'Log Food or Workout'}
             {status === 'recording' && 'Listening...'}
-            {status === 'processing' && 'AI Thinking...'}
+            {status === 'processing' && 'AI Scanner Thinking...'}
             {apiKey && <Sparkles size={18} color="var(--accent-purple)" style={{ animation: 'float 2s infinite' }} />}
           </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '380px', margin: '0 auto' }}>
-            {status === 'idle' && (apiKey ? 'Tap the mic and say: "I had a cup of black coffee and a large butter croissant."' : 'Tap the mic to log (requires API key) or type your food below!')}
-            {status === 'recording' && 'Speak clearly! Mention portion weights or counts if possible.'}
-            {status === 'processing' && 'Gemini is parsing the nutritional values and scaling macros...'}
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '420px', margin: '0 auto' }}>
+            {status === 'idle' && (
+              apiKey 
+                ? 'Tap mic to talk, tap camera to upload/scan a food photo, or type below! (e.g. "I did a 40 min run")'
+                : 'Type your food/workouts below, or add your Gemini API Key in Settings to unlock premium voice and camera photo tracking!'
+            )}
+            {status === 'recording' && 'Speak clearly! Mention ingredients, portions, or workout duration.'}
+            {status === 'processing' && 'Gemini is scanning visual details and scaling metrics...'}
           </p>
         </div>
 
@@ -211,37 +248,72 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           </div>
         )}
 
-        {/* Main Glowing Micro Button */}
-        <div style={{ zIndex: 1 }}>
+        {/* Action Buttons Group */}
+        <div style={{ zIndex: 1, display: 'flex', gap: '1.5rem', alignItems: 'center', justifyContent: 'center' }}>
           {status === 'idle' ? (
-            <button 
-              onClick={startRecording}
-              style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--accent-purple)',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-primary)',
-                boxShadow: '0 0 20px var(--accent-purple-glow)',
-                transition: 'var(--transition-spring)',
-                position: 'relative'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.08)';
-                e.currentTarget.style.boxShadow = '0 0 30px var(--accent-purple)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 0 20px var(--accent-purple-glow)';
-              }}
-            >
-              <Mic size={32} />
-            </button>
+            <>
+              {/* Voice Pill */}
+              <button 
+                onClick={startRecording}
+                title="Voice Log"
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent-purple)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-primary)',
+                  boxShadow: '0 0 20px var(--accent-purple-glow)',
+                  transition: 'var(--transition-spring)',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 0 30px var(--accent-purple)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 0 20px var(--accent-purple-glow)';
+                }}
+              >
+                <Mic size={32} />
+              </button>
+
+              {/* Camera Pill */}
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                title="Photo Scan"
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent-teal)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-primary)',
+                  boxShadow: '0 0 20px var(--accent-teal-glow)',
+                  transition: 'var(--transition-spring)',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 0 30px var(--accent-teal)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 0 20px var(--accent-teal-glow)';
+                }}
+              >
+                <Camera size={32} />
+              </button>
+            </>
           ) : status === 'recording' ? (
             <button 
               onClick={stopRecording}
@@ -287,7 +359,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           }
         `}} />
 
-        {/* Mic Obstructed warning info */}
+        {/* Error warning info */}
         {micError && (
           <div style={{
             display: 'flex',
@@ -315,7 +387,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
             type="text"
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Or type what you ate (e.g. '3 boiled eggs and raw almonds')..."
+            placeholder="Or type what you ate or your workout (e.g. 'Ran for 30 minutes' or 'Oatmeal')..."
             disabled={status === 'processing'}
             style={{
               width: '100%',

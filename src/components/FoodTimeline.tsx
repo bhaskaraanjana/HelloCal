@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { MealLog, UserGoals } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals } from '../types/nutrition';
 import { 
   Trash2, 
   CalendarRange, 
@@ -16,11 +16,13 @@ import {
 
 interface FoodTimelineProps {
   logs: MealLog[];
+  workouts?: WorkoutLog[];
   onDeleteLog: (id: string) => void;
+  onDeleteWorkout?: (id: string) => void;
   goals?: UserGoals;
 }
 
-export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, goals }) => {
+export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, goals }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'feed'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -33,6 +35,11 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [expandedFoodKey, setExpandedFoodKey] = useState<string | null>(null);
+
+  const toggleFoodExpand = (key: string) => {
+    setExpandedFoodKey(expandedFoodKey === key ? null : key);
+  };
 
   // Date Comparison Helper
   const isSameDay = (t1: number, t2: number) => {
@@ -47,7 +54,8 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
 
   // Check if a specific date has any logs
   const dayHasLogs = (date: Date) => {
-    return logs.some(log => isSameDay(log.timestamp, date.getTime()));
+    return logs.some(log => isSameDay(log.timestamp, date.getTime())) ||
+           workouts.some(w => isSameDay(w.timestamp, date.getTime()));
   };
 
   // Helper to format timestamps
@@ -100,11 +108,23 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
     });
   };
 
-  // Filter logs based on selection mode
-  const filteredLogs = logs
-    .filter(log => {
+  // Construct combined timeline list
+  interface TimelineItem {
+    type: 'food' | 'workout';
+    timestamp: number;
+    item: any;
+  }
+
+  const combinedItems: TimelineItem[] = [
+    ...logs.map(log => ({ type: 'food' as const, timestamp: log.timestamp, item: log })),
+    ...workouts.map(w => ({ type: 'workout' as const, timestamp: w.timestamp, item: w }))
+  ];
+
+  // Filter based on selection mode
+  const filteredTimeline = combinedItems
+    .filter(x => {
       if (viewMode === 'feed') return true;
-      return isSameDay(log.timestamp, selectedDate.getTime());
+      return isSameDay(x.timestamp, selectedDate.getTime());
     })
     .sort((a, b) => b.timestamp - a.timestamp); // newest first
 
@@ -113,15 +133,22 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
   let dailyProtein = 0;
   let dailyCarbs = 0;
   let dailyFat = 0;
+  let dailyBurned = 0;
 
   if (viewMode === 'calendar') {
-    filteredLogs.forEach(log => {
-      log.items.forEach(item => {
-        dailyCals += Number(item.calories) || 0;
-        dailyProtein += Number(item.protein) || 0;
-        dailyCarbs += Number(item.carbs) || 0;
-        dailyFat += Number(item.fat) || 0;
-      });
+    filteredTimeline.forEach(x => {
+      if (x.type === 'food') {
+        const log = x.item as MealLog;
+        log.items.forEach(item => {
+          dailyCals += Number(item.calories) || 0;
+          dailyProtein += Number(item.protein) || 0;
+          dailyCarbs += Number(item.carbs) || 0;
+          dailyFat += Number(item.fat) || 0;
+        });
+      } else if (x.type === 'workout') {
+        const w = x.item as WorkoutLog;
+        dailyBurned += Number(w.caloriesBurned) || 0;
+      }
     });
   }
 
@@ -444,7 +471,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
                 </span>
                 {goals && (
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
-                    / {goals.calories} kcal
+                    / {goals.calories + dailyBurned} kcal
                   </span>
                 )}
               </div>
@@ -455,12 +482,19 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
               <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.03)', borderRadius: '99px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
-                  width: `${Math.min((dailyCals / goals.calories) * 100, 100)}%`,
-                  backgroundColor: dailyCals > goals.calories ? 'var(--accent-rose)' : 'var(--accent-purple)',
-                  boxShadow: dailyCals > goals.calories ? '0 0 8px var(--accent-rose-glow)' : '0 0 8px var(--accent-purple-glow)',
+                  width: `${Math.min((dailyCals / (goals.calories + dailyBurned)) * 100, 100)}%`,
+                  backgroundColor: dailyCals > (goals.calories + dailyBurned) ? 'var(--accent-rose)' : 'var(--accent-purple)',
+                  boxShadow: dailyCals > (goals.calories + dailyBurned) ? '0 0 8px var(--accent-rose-glow)' : '0 0 8px var(--accent-purple-glow)',
                   borderRadius: '99px',
                   transition: 'width 0.5s ease-out'
                 }} />
+              </div>
+            )}
+
+            {/* Active Burn expansion helper subtitle */}
+            {dailyBurned > 0 && goals && (
+              <div style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', fontFamily: 'var(--font-display)', marginTop: '-0.2rem' }}>
+                🏃‍♂️ Base Goal: {goals.calories} kcal + Active Burn: {dailyBurned} kcal
               </div>
             )}
 
@@ -508,7 +542,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
         overflowY: 'auto',
         paddingRight: '0.25rem'
       }}>
-        {filteredLogs.length === 0 ? (
+        {filteredTimeline.length === 0 ? (
           <div style={{
             textAlign: 'center',
             padding: '3.5rem 1rem',
@@ -532,9 +566,9 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
               <Activity size={24} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>No food logged for this day</span>
+              <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>No activity logged for this day</span>
               <span style={{ fontSize: '0.8rem', maxWidth: '280px', margin: '0 auto', lineHeight: '1.4' }}>
-                {viewMode === 'calendar' ? 'Speak or type your intake in the console above to fill this date!' : 'Your activity history is currently clear.'}
+                {viewMode === 'calendar' ? 'Speak, upload a photo, or type your activity in the console above!' : 'Your activity history is currently clear.'}
               </span>
             </div>
             {viewMode === 'calendar' && !isSameDay(selectedDate.getTime(), new Date().getTime()) && (
@@ -553,160 +587,339 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, onDeleteLog, g
             )}
           </div>
         ) : (
-          filteredLogs.map((log) => {
-            const mealCals = log.items.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
-            const mealProtein = log.items.reduce((sum, item) => sum + (Number(item.protein) || 0), 0);
-            const mealCarbs = log.items.reduce((sum, item) => sum + (Number(item.carbs) || 0), 0);
-            const mealFat = log.items.reduce((sum, item) => sum + (Number(item.fat) || 0), 0);
+          filteredTimeline.map((timelineItem) => {
+            if (timelineItem.type === 'food') {
+              const log = timelineItem.item as MealLog;
+              const mealCals = log.items.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
+              const mealProtein = log.items.reduce((sum, item) => sum + (Number(item.protein) || 0), 0);
+              const mealCarbs = log.items.reduce((sum, item) => sum + (Number(item.carbs) || 0), 0);
+              const mealFat = log.items.reduce((sum, item) => sum + (Number(item.fat) || 0), 0);
 
-            return (
-              <div 
-                key={log.id} 
-                className="glass-card" 
-                style={{ 
-                  padding: '1.1rem', 
-                  borderRadius: '16px',
-                  backgroundColor: 'rgba(255,255,255,0.012)',
-                  border: '1px solid rgba(255,255,255,0.035)',
-                  boxShadow: 'none'
-                }}
-              >
-                {/* Meal Header */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '0.85rem',
-                  borderBottom: '1px solid rgba(255,255,255,0.03)',
-                  paddingBottom: '0.5rem'
-                }}>
-                  {/* Category & Time */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      backgroundColor: 'rgba(255,255,255,0.02)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
-                      {getMealIcon(log.mealType)}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 650, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
-                        {getMealHeaderLabel(log.mealType)}
-                      </span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        <Clock size={10} />
-                        {formatTime(log.timestamp)} {viewMode === 'feed' && `• ${formatDate(log.timestamp)}`}
-                      </span>
-                    </div>
-                  </div>
+              const mealAddedSugar = log.items.reduce((sum, item) => sum + (Number(item.addedSugar) || 0), 0);
+              const mealFiber = log.items.reduce((sum, item) => sum + (Number(item.fiber) || 0), 0);
+              const mealSodium = log.items.reduce((sum, item) => sum + (Number(item.sodium) || 0), 0);
 
-                  {/* Summary Calories & Delete button */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent-purple)', fontFamily: 'var(--font-display)' }}>
-                        {mealCals}
-                      </span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', marginLeft: '0.15rem' }}>
-                        kcal
-                      </span>
-                    </div>
-                    
-                    <button 
-                      onClick={() => onDeleteLog(log.id)}
-                      style={{
-                        background: 'rgba(244, 63, 94, 0.05)',
-                        border: '1px solid rgba(244, 63, 94, 0.1)',
+              const isExpanded = expandedFoodKey === log.id;
+
+              return (
+                <div 
+                  key={log.id} 
+                  className="glass-card" 
+                  onClick={() => toggleFoodExpand(log.id)}
+                  style={{ 
+                    padding: '1.1rem', 
+                    borderRadius: '16px',
+                    backgroundColor: 'rgba(255,255,255,0.012)',
+                    border: '1px solid rgba(255,255,255,0.035)',
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out'
+                  }}
+                >
+                  {/* Meal Header */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '0.85rem',
+                    borderBottom: '1px solid rgba(255,255,255,0.03)',
+                    paddingBottom: '0.5rem'
+                  }}>
+                    {/* Category & Time */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{
                         width: '28px',
                         height: '28px',
-                        borderRadius: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: 'rgba(255,255,255,0.02)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        transition: 'var(--transition-smooth)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = 'var(--text-primary)';
-                        e.currentTarget.style.backgroundColor = 'var(--accent-rose)';
-                        e.currentTarget.style.borderColor = 'var(--accent-rose)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = 'var(--text-muted)';
-                        e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
-                        e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.1)';
-                      }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Individual Food Items */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {log.items.map((item, idx) => (
-                    <div 
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '0.4rem 0.6rem',
-                        backgroundColor: 'rgba(255, 255, 255, 0.008)',
-                        border: '1px solid rgba(255, 255, 255, 0.015)',
-                        borderRadius: '8px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)' }}>{item.name}</span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.quantity}</span>
+                        justifyContent: 'center'
+                      }}>
+                        {getMealIcon(log.mealType)}
                       </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', gap: '0.35rem', fontSize: '0.7rem', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
-                          <span style={{ color: 'var(--accent-teal)' }}>{Math.round(item.protein)}g P</span>
-                          <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}>|</span>
-                          <span style={{ color: 'var(--accent-blue)' }}>{Math.round(item.carbs)}g C</span>
-                          <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}>|</span>
-                          <span style={{ color: 'var(--accent-amber)' }}>{Math.round(item.fat)}g F</span>
-                        </div>
-                        <span style={{
-                          fontSize: '0.8rem',
-                          fontWeight: 650,
-                          color: 'var(--text-primary)',
-                          fontFamily: 'var(--font-display)',
-                          marginLeft: '0.2rem'
-                        }}>
-                          {item.calories} <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>kcal</span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 655, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
+                          {getMealHeaderLabel(log.mealType)}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Clock size={10} />
+                          {formatTime(log.timestamp)} {viewMode === 'feed' && `• ${formatDate(log.timestamp)}`}
                         </span>
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                {/* Log macros summary */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '0.75rem',
-                  fontSize: '0.7rem',
-                  color: 'var(--text-secondary)',
-                  marginTop: '0.6rem',
-                  fontFamily: 'var(--font-display)',
-                  fontWeight: 500,
-                  opacity: 0.8
-                }}>
-                  <span>Protein: <strong style={{ color: 'var(--accent-teal)' }}>{Math.round(mealProtein)}g</strong></span>
-                  <span>Carbs: <strong style={{ color: 'var(--accent-blue)' }}>{Math.round(mealCarbs)}g</strong></span>
-                  <span>Fat: <strong style={{ color: 'var(--accent-amber)' }}>{Math.round(mealFat)}g</strong></span>
-                </div>
+                    {/* Summary Calories & Delete button */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent-purple)', fontFamily: 'var(--font-display)' }}>
+                          {mealCals}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', marginLeft: '0.15rem' }}>
+                          kcal
+                        </span>
+                      </div>
+                      
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteLog(log.id);
+                        }}
+                        style={{
+                          background: 'rgba(244, 63, 94, 0.05)',
+                          border: '1px solid rgba(244, 63, 94, 0.1)',
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          transition: 'var(--transition-smooth)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = 'var(--text-primary)';
+                          e.currentTarget.style.backgroundColor = 'var(--accent-rose)';
+                          e.currentTarget.style.borderColor = 'var(--accent-rose)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = 'var(--text-muted)';
+                          e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
+                          e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.1)';
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
 
-              </div>
-            );
+                  {/* Individual Food Items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {log.items.map((item, idx) => (
+                      <div 
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          padding: '0.5rem 0.6rem',
+                          backgroundColor: 'rgba(255, 255, 255, 0.008)',
+                          border: '1px solid rgba(255, 255, 255, 0.015)',
+                          borderRadius: '8px',
+                          gap: '0.25rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)' }}>{item.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.quantity}</span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', gap: '0.35rem', fontSize: '0.7rem', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
+                              <span style={{ color: 'var(--accent-teal)' }}>{Math.round(item.protein)}g P</span>
+                              <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}>|</span>
+                              <span style={{ color: 'var(--accent-blue)' }}>{Math.round(item.carbs)}g C</span>
+                              <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}>|</span>
+                              <span style={{ color: 'var(--accent-amber)' }}>{Math.round(item.fat)}g F</span>
+                            </div>
+                            <span style={{
+                              fontSize: '0.8rem',
+                              fontWeight: 650,
+                              color: 'var(--text-primary)',
+                              fontFamily: 'var(--font-display)',
+                              marginLeft: '0.2rem'
+                            }}>
+                              {item.calories} <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>kcal</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Collapsible item-level micronutrients */}
+                        {isExpanded && (
+                          <div style={{
+                            display: 'flex',
+                            gap: '0.5rem',
+                            fontSize: '0.7rem',
+                            color: 'var(--text-secondary)',
+                            borderTop: '1px dashed rgba(255,255,255,0.04)',
+                            paddingTop: '0.3rem',
+                            marginTop: '0.1rem',
+                            fontFamily: 'var(--font-display)'
+                          }}>
+                            <span>🍭 Added Sugar: <strong style={{ color: 'var(--accent-rose)' }}>{item.addedSugar !== undefined ? item.addedSugar : 0}g</strong></span>
+                            <span style={{ opacity: 0.3 }}>•</span>
+                            <span>🌿 Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{item.fiber !== undefined ? item.fiber : 0}g</strong></span>
+                            <span style={{ opacity: 0.3 }}>•</span>
+                            <span>🧂 Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{item.sodium !== undefined ? item.sodium : 0}mg</strong></span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Log macros summary */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '0.6rem',
+                    fontFamily: 'var(--font-display)',
+                    fontWeight: 500,
+                    opacity: 0.8
+                  }}>
+                    {/* Collapsible Prompt indicator */}
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      {isExpanded ? '🔼 Click to close micronutrients' : '🔍 Click to view micronutrients'}
+                    </span>
+                    
+                    <div style={{
+                      display: 'flex',
+                      gap: '0.75rem',
+                      fontSize: '0.7rem',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      <span>Protein: <strong style={{ color: 'var(--accent-teal)' }}>{Math.round(mealProtein)}g</strong></span>
+                      <span>Carbs: <strong style={{ color: 'var(--accent-blue)' }}>{Math.round(mealCarbs)}g</strong></span>
+                      <span>Fat: <strong style={{ color: 'var(--accent-amber)' }}>{Math.round(mealFat)}g</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Collapsible meal-level micronutrients aggregate */}
+                  {isExpanded && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: '0.75rem',
+                      fontSize: '0.7rem',
+                      color: 'var(--text-secondary)',
+                      marginTop: '0.5rem',
+                      borderTop: '1px solid rgba(255,255,255,0.03)',
+                      paddingTop: '0.4rem',
+                      fontFamily: 'var(--font-display)',
+                      fontWeight: 600
+                    }}>
+                      <span>Added Sugar: <strong style={{ color: 'var(--accent-rose)' }}>{mealAddedSugar}g</strong></span>
+                      <span>Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{mealFiber}g</strong></span>
+                      <span>Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{mealSodium}mg</strong></span>
+                    </div>
+                  )}
+
+                </div>
+              );
+            } else {
+              // WORKOUT logs rendered chronologically inline!
+              const w = timelineItem.item as WorkoutLog;
+              return (
+                <div 
+                  key={w.id} 
+                  className="glass-card" 
+                  style={{ 
+                    padding: '1.1rem', 
+                    borderRadius: '16px',
+                    border: '1px solid rgba(6, 182, 212, 0.2)',
+                    backgroundColor: 'rgba(6, 182, 212, 0.02)',
+                    boxShadow: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.6rem'
+                  }}
+                >
+                  {/* Workout Header */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    {/* Activity Title */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        backgroundColor: 'rgba(6, 182, 212, 0.08)',
+                        border: '1px solid rgba(6, 182, 212, 0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--accent-teal)'
+                      }}>
+                        <Activity size={14} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
+                          {w.activity}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Clock size={10} />
+                          {formatTime(w.timestamp)} {viewMode === 'feed' && `• ${formatDate(w.timestamp)}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Calories Burned & Delete */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-teal)', fontFamily: 'var(--font-display)' }}>
+                          -{w.caloriesBurned}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', marginLeft: '0.15rem' }}>
+                          kcal
+                        </span>
+                      </div>
+                      
+                      {onDeleteWorkout && (
+                        <button 
+                          onClick={() => onDeleteWorkout(w.id)}
+                          style={{
+                            background: 'rgba(244, 63, 94, 0.05)',
+                            border: '1px solid rgba(244, 63, 94, 0.1)',
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'var(--transition-smooth)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = 'var(--text-primary)';
+                            e.currentTarget.style.backgroundColor = 'var(--accent-rose)';
+                            e.currentTarget.style.borderColor = 'var(--accent-rose)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                            e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
+                            e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.1)';
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Workout Info body */}
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.005)',
+                    padding: '0.5rem 0.6rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.01)'
+                  }}>
+                    Duration: <strong style={{ color: 'var(--text-primary)' }}>{w.duration} minutes</strong>
+                    {w.notes && (
+                      <span style={{ display: 'block', marginTop: '0.2rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        📝 {w.notes}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
           })
         )}
       </div>

@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { FoodItem, CoachPersonality } from '../types/nutrition';
+import type { FoodItem, WorkoutLog, CoachPersonality } from '../types/nutrition';
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
-import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle } from 'lucide-react';
 
 interface RefinementModalProps {
   isOpen: boolean;
   onClose: () => void;
   parsedItems: Omit<FoodItem, 'id'>[];
-  onSave: (items: Omit<FoodItem, 'id'>[]) => void;
+  parsedWorkout: Omit<WorkoutLog, 'id'> | null;
+  logType: 'food' | 'workout' | 'mixed';
+  onSave: (items: Omit<FoodItem, 'id'>[], workout: Omit<WorkoutLog, 'id'> | null) => void;
   coachingMessage?: string;
   apiKey: string;
   personality: CoachPersonality;
@@ -18,13 +20,17 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   isOpen,
   onClose,
   parsedItems,
+  parsedWorkout,
+  logType,
   onSave,
   coachingMessage: initialCoaching,
   apiKey,
   personality
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
+  const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
   const [coaching, setCoaching] = useState('');
+  const [modalLogType, setModalLogType] = useState<'food' | 'workout' | 'mixed'>('food');
   
   // Correction States
   const [corrStatus, setCorrStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
@@ -38,12 +44,14 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setItems(JSON.parse(JSON.stringify(parsedItems)));
+      setWorkout(parsedWorkout ? JSON.parse(JSON.stringify(parsedWorkout)) : null);
       setCoaching(initialCoaching || '');
+      setModalLogType(logType);
       setCorrStatus('idle');
       setCorrInput('');
       setCorrError(null);
     }
-  }, [isOpen, parsedItems, initialCoaching]);
+  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching]);
 
   if (!isOpen) return null;
 
@@ -70,13 +78,17 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
         protein: 5,
         carbs: 15,
         fat: 2,
+        sugar: 0,
+        addedSugar: 0,
+        fiber: 0,
+        sodium: 0,
         confidence: 'high'
       }
     ]);
   };
 
   const handleConfirmSave = () => {
-    onSave(items);
+    onSave(items, (modalLogType === 'workout' || modalLogType === 'mixed') ? workout : null);
     onClose();
   };
 
@@ -122,8 +134,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
       recorder.start(250);
       setCorrStatus('recording');
-    } catch (err) {
-      setCorrError('Microphone access denied.');
+    } catch (err: any) {
+      console.error(err);
+      setCorrError('Microphone permission blocked.');
       setCorrStatus('idle');
     }
   };
@@ -143,8 +156,10 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
     }
 
     try {
-      const res = await gemini.correctVoice(items, blob, apiKey, personality);
-      setItems(res.items);
+      const res = await gemini.correctVoice(items, workout, blob, apiKey, personality);
+      setItems(res.items || []);
+      if (res.workout) setWorkout(res.workout);
+      if (res.type) setModalLogType(res.type);
       setCoaching(res.coachingMessage);
       setCorrError(null);
     } catch (err: any) {
@@ -154,7 +169,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
     }
   };
 
-  // 📝 TEXT CORRECTION PROCESSORS (including smart local offline commands)
+  // 📝 TEXT CORRECTION PROCESSORS
   const handleTextCorrectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = corrInput.trim();
@@ -166,12 +181,12 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
     try {
       if (apiKey) {
-        // AI supermode correction
-        const res = await gemini.correctText(items, query, apiKey, personality);
-        setItems(res.items);
+        const res = await gemini.correctText(items, workout, query, apiKey, personality);
+        setItems(res.items || []);
+        if (res.workout) setWorkout(res.workout);
+        if (res.type) setModalLogType(res.type);
         setCoaching(res.coachingMessage);
       } else {
-        // Smart offline local correction command parser!
         applyLocalCorrectionCommand(query);
       }
     } catch (err: any) {
@@ -198,42 +213,30 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       return;
     }
 
-    // Command 2: ADD
-    if (norm.startsWith('add') || norm.startsWith('with') || norm.startsWith('and')) {
-      const targetPhrase = norm.replace(/^(add|with|and)\s+/, '').trim();
-      const parsedRes = localParser.parseText(targetPhrase);
-      
-      if (parsedRes.items && parsedRes.items.length > 0) {
-        setItems([...items, ...parsedRes.items]);
-        setCoaching(`Offline Mode: Added "${parsedRes.items[0].name}" successfully.`);
-      } else {
-        setCorrError(`Offline Command: Could not parse food to add.`);
-      }
-      return;
-    }
-
-    // Command 3: CHANGE / MAKE (e.g. "change eggs to 2")
-    if (norm.includes('change') || norm.includes('make') || norm.includes('to')) {
-      // Find numbers in command
-      const numMatch = norm.match(/(\d+(?:\.\d+)?)/);
-      if (numMatch) {
-        const newQtyVal = parseFloat(numMatch[1]);
-        // Search staged items for key match
+    // Command 2: CHANGE / PORTION ADJUST
+    if (norm.startsWith('change') || norm.startsWith('make') || norm.startsWith('set')) {
+      const match = norm.match(/(?:change|make|set)\s+(.+?)\s+(?:to|portion)\s+(.+)/);
+      if (match) {
+        const targetFood = match[1].trim();
+        const newPortion = match[2].trim();
+        
         let changed = false;
         const updated = items.map(item => {
-          if (norm.includes(item.name.toLowerCase()) || item.name.toLowerCase().split(' ').some(w => norm.includes(w))) {
+          if (item.name.toLowerCase().includes(targetFood)) {
             changed = true;
-            // Scale calories & macros proportionally based on portion count
-            const oldQtyVal = parseFloat(item.quantity) || 1;
-            const ratio = oldQtyVal > 0 ? newQtyVal / oldQtyVal : newQtyVal;
-            
+            // Guess scale multiplier
+            let multiplier = 1;
+            if (newPortion.includes('double') || newPortion.includes('2x') || newPortion.includes('two')) multiplier = 2;
+            else if (newPortion.includes('half') || newPortion.includes('0.5x')) multiplier = 0.5;
+            else if (newPortion.includes('triple') || newPortion.includes('3x')) multiplier = 3;
+
             return {
               ...item,
-              quantity: item.quantity.replace(/\d+/, newQtyVal.toString()),
-              calories: Math.round(item.calories * ratio),
-              protein: Math.round(item.protein * ratio * 10) / 10,
-              carbs: Math.round(item.carbs * ratio * 10) / 10,
-              fat: Math.round(item.fat * ratio * 10) / 10
+              quantity: newPortion,
+              calories: Math.round(item.calories * multiplier),
+              protein: Math.round(item.protein * multiplier * 10) / 10,
+              carbs: Math.round(item.carbs * multiplier * 10) / 10,
+              fat: Math.round(item.fat * multiplier * 10) / 10
             };
           }
           return item;
@@ -251,7 +254,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
     // Default: treat as text parsing append
     const parsedRes = localParser.parseText(cmd);
-    setItems([...items, ...parsedRes.items]);
+    setItems([...items, ...(parsedRes.items || [])]);
     setCoaching('Offline Mode: Appended parsed food.');
   };
 
@@ -259,6 +262,15 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   const totalProtein = items.reduce((sum, item) => sum + (Number(item.protein) || 0), 0);
   const totalCarbs = items.reduce((sum, item) => sum + (Number(item.carbs) || 0), 0);
   const totalFat = items.reduce((sum, item) => sum + (Number(item.fat) || 0), 0);
+
+  const disabledButton = 
+    (modalLogType === 'food' && items.length === 0) ||
+    (modalLogType === 'workout' && !workout) ||
+    (modalLogType === 'mixed' && items.length === 0 && !workout);
+
+  const buttonText = 
+    modalLogType === 'workout' ? 'Log Workout' :
+    modalLogType === 'mixed' ? 'Log Meal & Workout' : 'Log Meal';
 
   return (
     <div className="modal-overlay">
@@ -298,305 +310,330 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
             padding: '0.8rem 1.25rem',
             background: 'rgba(139, 92, 246, 0.05)',
             borderBottom: '1px solid rgba(139, 92, 246, 0.1)',
+            color: 'var(--text-primary)',
             fontSize: '0.85rem',
-            color: '#c084fc',
-            fontStyle: 'italic',
-            lineHeight: '1.4'
+            fontFamily: 'var(--font-display)',
+            lineHeight: '1.4',
+            maxHeight: '100px',
+            overflowY: 'auto'
           }}>
-            <strong>HaloCal Coach:</strong> "{coaching}"
+            🌟 <strong style={{ color: 'var(--accent-purple)' }}>AI Coach:</strong> {coaching}
           </div>
         )}
 
-        {/* Food Editing Feed */}
-        <div style={{
-          padding: '1.25rem',
-          overflowY: 'auto',
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.75rem'
-        }}>
-          {items.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
-              No food items remaining. Add a new item to log.
-            </div>
-          ) : (
-            items.map((item, index) => (
-              <div 
-                key={index} 
-                className="glass-card" 
-                style={{ 
-                  padding: '0.85rem', 
-                  borderRadius: '16px',
-                  backgroundColor: 'rgba(255,255,255,0.01)',
-                  position: 'relative'
-                }}
-              >
-                {/* Confidence Badge */}
-                <span style={{
-                  position: 'absolute',
-                  top: '0.6rem',
-                  right: '2.5rem',
-                  fontSize: '0.65rem',
-                  padding: '0.15rem 0.4rem',
-                  borderRadius: '99px',
-                  backgroundColor: item.confidence === 'high' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                  color: item.confidence === 'high' ? 'var(--accent-teal)' : 'var(--accent-amber)',
-                  fontWeight: 600,
-                  fontFamily: 'var(--font-display)'
-                }}>
-                  {item.confidence === 'high' ? 'AI Resolved' : 'Assumed'}
-                </span>
-
-                {/* Edit Form Fields */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: '0.5rem', marginBottom: '0.5rem', paddingRight: '1.5rem' }}>
-                  {/* Name field */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                    <input 
-                      type="text" 
-                      value={item.name}
-                      onChange={(e) => handleUpdateField(index, 'name', e.target.value)}
-                      placeholder="Food name"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
-                        padding: '0.2rem 0',
-                        color: 'var(--text-primary)',
-                        fontSize: '0.9rem',
-                        fontWeight: 600,
-                        outline: 'none'
-                      }}
-                    />
-                  </div>
-
-                  {/* Quantity field */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                    <input 
-                      type="text" 
-                      value={item.quantity}
-                      onChange={(e) => handleUpdateField(index, 'quantity', e.target.value)}
-                      placeholder="Portion size"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
-                        padding: '0.2rem 0',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.85rem',
-                        outline: 'none'
-                      }}
-                    />
-                  </div>
+        {/* Scrollable Center Form Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
+          
+          {/* Active Workout Log Card */}
+          {(modalLogType === 'workout' || modalLogType === 'mixed') && workout && (
+            <div 
+              className="glass-card" 
+              style={{ 
+                padding: '1.25rem', 
+                marginBottom: '1.5rem', 
+                border: '1px solid rgba(6, 182, 212, 0.2)',
+                backgroundColor: 'rgba(6, 182, 212, 0.02)'
+              }}
+            >
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--accent-teal)', fontFamily: 'var(--font-display)' }}>
+                🏃‍♂️ Workout Logs Staged
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem', fontFamily: 'var(--font-display)' }}>Activity Name</label>
+                  <input 
+                    type="text" 
+                    value={workout.activity} 
+                    onChange={(e) => setWorkout({ ...workout, activity: e.target.value })}
+                    style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                  />
                 </div>
-
-                {/* Quick macro/calorie input values */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem', marginTop: '0.4rem' }}>
-                  {/* Calories */}
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', padding: '0.25rem' }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>Kcal</span>
-                    <input 
-                      type="number" 
-                      value={item.calories}
-                      onChange={(e) => handleUpdateField(index, 'calories', parseInt(e.target.value) || 0)}
-                      style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
-                    />
-                  </div>
-
-                  {/* Protein */}
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(16,185,129,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--accent-teal)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>P(g)</span>
-                    <input 
-                      type="number" 
-                      value={item.protein}
-                      onChange={(e) => handleUpdateField(index, 'protein', parseFloat(e.target.value) || 0)}
-                      style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
-                    />
-                  </div>
-
-                  {/* Carbs */}
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(6,182,212,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--accent-blue)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>C(g)</span>
-                    <input 
-                      type="number" 
-                      value={item.carbs}
-                      onChange={(e) => handleUpdateField(index, 'carbs', parseFloat(e.target.value) || 0)}
-                      style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
-                    />
-                  </div>
-
-                  {/* Fat */}
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(139,92,246,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--accent-purple)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>F(g)</span>
-                    <input 
-                      type="number" 
-                      value={item.fat}
-                      onChange={(e) => handleUpdateField(index, 'fat', parseFloat(e.target.value) || 0)}
-                      style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
-                    />
-                  </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem', fontFamily: 'var(--font-display)' }}>Duration (minutes)</label>
+                  <input 
+                    type="number" 
+                    value={workout.duration} 
+                    onChange={(e) => setWorkout({ ...workout, duration: Number(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                  />
                 </div>
-
-                {/* Trash Icon */}
-                <button 
-                  onClick={() => handleRemoveItem(index)}
-                  style={{
-                    position: 'absolute',
-                    top: '0.5rem',
-                    right: '0.5rem',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem', fontFamily: 'var(--font-display)' }}>Calories Burned (kcal)</label>
+                  <input 
+                    type="number" 
+                    value={workout.caloriesBurned} 
+                    onChange={(e) => setWorkout({ ...workout, caloriesBurned: Number(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--accent-teal)', fontSize: '0.85rem', fontWeight: 700 }}
+                  />
+                </div>
               </div>
-            ))
+            </div>
           )}
 
-          {/* Add Food Button */}
-          <button 
-            onClick={handleAddItem}
-            className="btn btn-secondary" 
-            style={{
-              padding: '0.4rem 0.8rem',
-              borderStyle: 'dashed',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              fontSize: '0.8rem',
-              borderRadius: '12px'
-            }}
-          >
-            <Plus size={14} /> Add Food Item
-          </button>
-        </div>
+          {/* Food Editing Feed */}
+          {(modalLogType === 'food' || modalLogType === 'mixed') && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.2rem', color: 'var(--accent-purple)', fontFamily: 'var(--font-display)' }}>
+                🥗 Food & Portions Staged
+              </h3>
 
-        {/* Dynamic Speech & Text CORRECTION Overlay (Interactive refinement) */}
-        <div style={{
-          padding: '1rem 1.25rem',
-          borderTop: '1px solid var(--border-glass)',
-          background: corrStatus === 'recording' ? 'rgba(244,63,94,0.04)' : 'rgba(255,255,255,0.02)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.6rem'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-display)' }}>
-              <Sparkles size={12} color="var(--accent-purple)" />
-              {corrStatus === 'recording' ? 'Recording correction...' : 'Verbal Correction (Speak or type updates)'}
-            </span>
-            {corrError && (
-              <span style={{ fontSize: '0.7rem', color: 'var(--accent-rose)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                <AlertCircle size={10} /> {corrError}
-              </span>
-            )}
-          </div>
+              {items.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
+                  No food items remaining. Add a new item to log.
+                </div>
+              ) : (
+                items.map((item, index) => (
+                  <div 
+                    key={index} 
+                    className="glass-card" 
+                    style={{ 
+                      padding: '0.85rem', 
+                      borderRadius: '16px',
+                      backgroundColor: 'rgba(255,255,255,0.01)',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Confidence Badge */}
+                    <span style={{
+                      position: 'absolute',
+                      top: '0.6rem',
+                      right: '2.5rem',
+                      fontSize: '0.65rem',
+                      padding: '0.15rem 0.4rem',
+                      borderRadius: '99px',
+                      backgroundColor: item.confidence === 'high' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                      color: item.confidence === 'high' ? 'var(--accent-teal)' : 'var(--accent-amber)',
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-display)'
+                    }}>
+                      {item.confidence === 'high' ? 'AI Resolved' : 'Assumed'}
+                    </span>
 
-          <form onSubmit={handleTextCorrectionSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            
-            {/* Microphone Correction button */}
-            {corrStatus === 'idle' ? (
+                    {/* Edit Form Fields */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: '0.5rem', marginBottom: '0.5rem', paddingRight: '1.5rem' }}>
+                      {/* Name field */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        <input 
+                          type="text" 
+                          value={item.name}
+                          onChange={(e) => handleUpdateField(index, 'name', e.target.value)}
+                          placeholder="Food name"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: '1px solid rgba(255,255,255,0.08)',
+                            padding: '0.2rem 0',
+                            color: 'var(--text-primary)',
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+
+                      {/* Quantity field */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        <input 
+                          type="text" 
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateField(index, 'quantity', e.target.value)}
+                          placeholder="Portion size"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: '1px solid rgba(255,255,255,0.08)',
+                            padding: '0.2rem 0',
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.85rem',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Primary macros/calorie input values */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem', marginTop: '0.4rem' }}>
+                      {/* Calories */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>Kcal</span>
+                        <input 
+                          type="number" 
+                          value={item.calories}
+                          onChange={(e) => handleUpdateField(index, 'calories', parseInt(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+
+                      {/* Protein */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(16,185,129,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent-teal)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>P(g)</span>
+                        <input 
+                          type="number" 
+                          value={item.protein}
+                          onChange={(e) => handleUpdateField(index, 'protein', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+
+                      {/* Carbs */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(6,182,212,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent-blue)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>C(g)</span>
+                        <input 
+                          type="number" 
+                          value={item.carbs}
+                          onChange={(e) => handleUpdateField(index, 'carbs', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+
+                      {/* Fat */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(139,92,246,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent-purple)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>F(g)</span>
+                        <input 
+                          type="number" 
+                          value={item.fat}
+                          onChange={(e) => handleUpdateField(index, 'fat', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Secondary micronutrient values */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem', marginTop: '0.4rem' }}>
+                      {/* Added Sugar */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(244,63,94,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent-rose)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>Sug(g)</span>
+                        <input 
+                          type="number" 
+                          value={item.addedSugar !== undefined ? item.addedSugar : 0}
+                          onChange={(e) => handleUpdateField(index, 'addedSugar', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+
+                      {/* Fiber */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(16,185,129,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent-teal)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>Fib(g)</span>
+                        <input 
+                          type="number" 
+                          value={item.fiber !== undefined ? item.fiber : 0}
+                          onChange={(e) => handleUpdateField(index, 'fiber', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+
+                      {/* Sodium */}
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(245,158,11,0.03)', borderRadius: '8px', padding: '0.25rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent-amber)', marginRight: '0.25rem', fontFamily: 'var(--font-display)' }}>Na(mg)</span>
+                        <input 
+                          type="number" 
+                          value={item.sodium !== undefined ? item.sodium : 0}
+                          onChange={(e) => handleUpdateField(index, 'sodium', parseInt(e.target.value) || 0)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Trash Icon */}
+                    <button 
+                      onClick={() => handleRemoveItem(index)}
+                      style={{
+                        position: 'absolute',
+                        top: '0.5rem',
+                        right: '0.5rem',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+
+              {/* Add New Row Action */}
               <button 
-                type="button"
-                onClick={startRecording}
-                className="btn-icon"
+                onClick={handleAddItem}
+                className="btn btn-secondary"
                 style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  borderColor: 'var(--border-glass-glow)',
-                  color: 'var(--accent-purple)',
-                  boxShadow: '0 0 10px rgba(139, 92, 246, 0.1)'
-                }}
-              >
-                <Mic size={16} />
-              </button>
-            ) : corrStatus === 'recording' ? (
-              <button 
-                type="button"
-                onClick={stopRecording}
-                className="btn-icon"
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--accent-rose)',
-                  borderColor: 'var(--accent-rose)',
-                  color: '#fff',
-                  animation: 'pulseBorder 1.5s infinite'
-                }}
-              >
-                <MicOff size={16} />
-              </button>
-            ) : (
-              <div 
-                style={{
-                  width: '38px',
-                  height: '38px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'var(--accent-purple)'
+                  gap: '0.35rem',
+                  padding: '0.5rem 0',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  marginTop: '0.25rem'
                 }}
               >
-                <Loader2 size={18} className="spin-animation" style={{ animation: 'spin 1s linear infinite' }} />
-              </div>
-            )}
+                <Plus size={14} /> Add Another Item
+              </button>
+            </div>
+          )}
 
-            {/* Input Bar or Waveform */}
-            {corrStatus === 'recording' ? (
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                height: '38px',
-                background: 'rgba(244, 63, 94, 0.08)',
-                border: '1px dashed var(--accent-rose)',
-                borderRadius: '20px',
-                padding: '0 1rem'
-              }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--accent-rose)', marginRight: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
-                  Listening...
-                </span>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((bar) => {
-                  const animDuration = 0.4 + Math.random() * 0.6;
-                  return (
-                    <div 
-                      key={bar}
-                      style={{
-                        width: '3px',
-                        backgroundColor: 'var(--accent-rose)',
-                        borderRadius: '99px',
-                        height: '60%',
-                        animation: `wave ${animDuration}s ease-in-out infinite`,
-                        boxShadow: '0 0 6px var(--accent-rose-glow)'
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            ) : (
+        </div>
+
+        {/* Dynamic Correction Input Pill Area */}
+        <div style={{
+          padding: '0.85rem 1.25rem',
+          borderTop: '1px solid var(--border-glass)',
+          background: 'rgba(255,255,255,0.005)'
+        }}>
+          <form onSubmit={handleTextCorrectionSubmit} style={{ display: 'flex', gap: '0.6rem', width: '100%', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
               <input 
                 type="text"
                 value={corrInput}
                 onChange={(e) => setCorrInput(e.target.value)}
-                placeholder={apiKey ? "Speak mic or type: 'remove croissant', 'add banana'..." : "Type offline: 'remove salad', 'add milk', 'make eggs 2'..."}
+                placeholder={apiKey ? "Speak/type corrections (e.g. 'remove the eggs, make yogurt double portion')..." : "Type changes (offline commands support 'remove yogurt', etc)..."}
                 disabled={corrStatus === 'processing'}
                 style={{
-                  flex: 1,
-                  background: 'rgba(255,255,255,0.02)',
+                  width: '100%',
+                  background: 'rgba(0,0,0,0.2)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '20px',
-                  padding: '0.5rem 1rem',
-                  color: '#fff',
+                  borderRadius: '99px',
+                  padding: '0.6rem 2.5rem 0.6rem 1rem',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   outline: 'none'
+                }}
+              />
+              {/* Mic Icon within input for corrections */}
+              {apiKey && (
+                <button
+                  type="button"
+                  onClick={corrStatus === 'recording' ? stopRecording : startRecording}
+                  style={{
+                    position: 'absolute',
+                    right: '0.5rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    color: corrStatus === 'recording' ? 'var(--accent-rose)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {corrStatus === 'recording' ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+              )}
+            </div>
+
+            {corrStatus === 'processing' && (
+              <div 
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  border: '2px solid var(--accent-purple)',
+                  borderTopColor: 'transparent',
+                  animation: 'spin 1s linear infinite'
                 }}
               />
             )}
@@ -618,6 +655,12 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
               <Send size={14} />
             </button>
           </form>
+          {corrError && (
+            <div style={{ color: '#fda4af', fontSize: '0.75rem', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <AlertCircle size={12} />
+              <span>{corrError}</span>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer (Summary & CTA) */}
@@ -629,20 +672,32 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
           alignItems: 'center',
           background: 'rgba(255,255,255,0.01)'
         }}>
-          {/* Aggregated Nutrition */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Log Summary</span>
-            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-purple)' }}>{totalCalories}</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>kcal •</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-teal)' }}>{Math.round(totalProtein)}g</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>P •</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-blue)' }}>{Math.round(totalCarbs)}g</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>C •</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-amber)' }}>{Math.round(totalFat)}g</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>F</span>
+          {/* Aggregated Nutrition (only for food/mixed) */}
+          {(modalLogType === 'food' || modalLogType === 'mixed') ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Nutrients Summary</span>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-purple)' }}>{totalCalories}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>kcal •</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-teal)' }}>{Math.round(totalProtein)}g</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>P •</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-blue)' }}>{Math.round(totalCarbs)}g</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>C •</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-amber)' }}>{Math.round(totalFat)}g</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>F</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Workout Summary</span>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'baseline' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-teal)' }}>-{workout?.caloriesBurned || 0}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>kcal •</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{workout?.duration || 0}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>mins active</span>
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -652,10 +707,10 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
             <button 
               onClick={handleConfirmSave} 
               className="btn btn-primary"
-              disabled={items.length === 0}
+              disabled={disabledButton}
               style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
             >
-              <Check size={14} /> Log Meal
+              <Check size={14} /> {buttonText}
             </button>
           </div>
         </div>

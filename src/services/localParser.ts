@@ -127,6 +127,7 @@ export const localParser = {
     const coachingMessage = `Offline Mode: Logged ${items.length} item(s) for a total of ~${totalCals} kcal. Activate the "Gemini AI Supermode" in settings to unlock smart portion sizes and customized coaching feedback!`;
 
     return {
+      type: 'food',
       items,
       coachingMessage
     };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { MealLog, FoodItem, UserGoals, CoachPersonality, CoachResponse } from './types/nutrition';
+import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse } from './types/nutrition';
 import { storage } from './services/storage';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -13,7 +13,8 @@ import confetti from 'canvas-confetti';
 export const App: React.FC = () => {
   // 1. Core States loaded from localStorage on mount
   const [logs, setLogs] = useState<MealLog[]>([]);
-  const [goals, setGoals] = useState<UserGoals>({ calories: 2000, protein: 130, carbs: 220, fat: 65 });
+  const [workouts, setWorkouts] = useState<WorkoutLog[]>([]);
+  const [goals, setGoals] = useState<UserGoals>({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300 });
   const [geminiKey, setGeminiKey] = useState('');
   const [coachPersonality, setCoachPersonality] = useState<CoachPersonality>('encouraging');
 
@@ -26,6 +27,8 @@ export const App: React.FC = () => {
   // Refinement modal states
   const [refinementOpen, setRefinementOpen] = useState(false);
   const [stagedItems, setStagedItems] = useState<Omit<FoodItem, 'id'>[]>([]);
+  const [stagedWorkout, setStagedWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
+  const [stagedLogType, setStagedLogType] = useState<'food' | 'workout' | 'mixed'>('food');
   const [stagedCoaching, setStagedCoaching] = useState('');
 
   // Floating notifications/toast state
@@ -35,6 +38,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const data = storage.getData();
     setLogs(data.logs);
+    setWorkouts(data.workouts || []);
     setGoals(data.goals);
     setGeminiKey(data.geminiKey);
     setCoachPersonality(data.coachPersonality);
@@ -70,63 +74,95 @@ export const App: React.FC = () => {
 
   // Core Log Action
   const handleLoggingSuccess = (response: CoachResponse) => {
-    setStagedItems(response.items);
-    setStagedCoaching(response.coachingMessage);
+    setStagedItems(response.items || []);
+    setStagedWorkout(response.workout || null);
+    setStagedLogType(response.type || 'food');
+    setStagedCoaching(response.coachingMessage || '');
     setRefinementOpen(true);
   };
 
-  const handleConfirmSaveMeal = (itemsToLog: Omit<FoodItem, 'id'>[]) => {
-    if (itemsToLog.length === 0) return;
+  const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null) => {
+    let savedFood = false;
+    let savedWorkout = false;
 
-    // Detect meal slot type automatically based on local time
-    const hour = new Date().getHours();
-    let mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack';
-    if (hour >= 4 && hour < 11) {
-      mealType = 'breakfast';
-    } else if (hour >= 11 && hour < 16) {
-      mealType = 'lunch';
-    } else if (hour >= 17 && hour < 22) {
-      mealType = 'dinner';
+    // 1. Handle Food Items
+    if (itemsToLog.length > 0) {
+      // Detect meal slot type automatically based on local time
+      const hour = new Date().getHours();
+      let mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack';
+      if (hour >= 4 && hour < 11) {
+        mealType = 'breakfast';
+      } else if (hour >= 11 && hour < 16) {
+        mealType = 'lunch';
+      } else if (hour >= 17 && hour < 22) {
+        mealType = 'dinner';
+      }
+
+      // Add unique IDs to food items
+      const loggedItems: FoodItem[] = itemsToLog.map(item => ({
+        ...item,
+        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+      }));
+
+      const newLogEntry: MealLog = {
+        id: `meal_${Date.now()}`,
+        timestamp: Date.now(),
+        mealType,
+        items: loggedItems
+      };
+
+      const updatedLogs = [newLogEntry, ...logs];
+      setLogs(updatedLogs);
+      storage.saveLogs(updatedLogs);
+
+      const mealCals = loggedItems.reduce((sum, item) => sum + item.calories, 0);
+      triggerToast(`Logged ${loggedItems.length} food item(s) successfully! (+${mealCals} kcal)`);
+      savedFood = true;
     }
 
-    // Add unique IDs to food items
-    const loggedItems: FoodItem[] = itemsToLog.map(item => ({
-      ...item,
-      id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-    }));
+    // 2. Handle Workout
+    if (workoutToLog) {
+      const newWorkoutEntry: WorkoutLog = {
+        ...workoutToLog,
+        id: `workout_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: Date.now()
+      };
 
-    const newLogEntry: MealLog = {
-      id: `meal_${Date.now()}`,
-      timestamp: Date.now(),
-      mealType,
-      items: loggedItems
-    };
+      const updatedWorkouts = [newWorkoutEntry, ...workouts];
+      setWorkouts(updatedWorkouts);
+      storage.saveWorkouts(updatedWorkouts);
 
-    const updatedLogs = [newLogEntry, ...logs];
-    setLogs(updatedLogs);
-    storage.saveLogs(updatedLogs);
+      triggerToast(`Workout logged successfully! (-${workoutToLog.caloriesBurned} kcal)`);
+      savedWorkout = true;
+    }
 
-    // Dynamic celebration triggers
-    const mealCals = loggedItems.reduce((sum, item) => sum + item.calories, 0);
-    
-    // Check if daily goal is reached
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const startOfToday = today.getTime();
-    const todayLogs = updatedLogs.filter(log => log.timestamp >= startOfToday);
-    const totalTodayCals = todayLogs.reduce((sum, log) => sum + log.items.reduce((s, i) => s + i.calories, 0), 0);
+    // Celebration triggers
+    if (savedFood || savedWorkout) {
+      // Sum today's remaining calories to see if close to target budget
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const startOfToday = today.getTime();
+      
+      const todayLogs = logs.filter(log => log.timestamp >= startOfToday);
+      let consumed = itemsToLog.reduce((s, i) => s + i.calories, 0);
+      todayLogs.forEach(log => {
+        log.items.forEach(item => { consumed += item.calories; });
+      });
 
-    triggerToast(`Logged ${loggedItems.length} food item(s) successfully! (+${mealCals} kcal)`);
+      const todayWorkouts = workouts.filter(w => w.timestamp >= startOfToday);
+      let activeBurn = workoutToLog ? workoutToLog.caloriesBurned : 0;
+      todayWorkouts.forEach(w => { activeBurn += w.caloriesBurned; });
 
-    if (totalTodayCals >= goals.calories - 50 && totalTodayCals <= goals.calories + 100) {
-      // Near perfect goal matching celebration!
-      setTimeout(() => {
-        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-      }, 500);
-      triggerToast('🎯 Incredible! You hit your calorie target halo perfectly today!');
-    } else {
-      // Small celebratory burst
-      confetti({ particleCount: 50, spread: 30, origin: { y: 0.8 } });
+      const expandedGoal = (goals.calories || 2000) + activeBurn;
+
+      if (consumed >= expandedGoal - 50 && consumed <= expandedGoal + 100) {
+        setTimeout(() => {
+          confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+        }, 500);
+        triggerToast('🎯 Incredible! You hit your calorie target halo perfectly today!');
+      } else {
+        confetti({ particleCount: 60, spread: 40, origin: { y: 0.8 } });
+      }
     }
   };
 
@@ -137,12 +173,26 @@ export const App: React.FC = () => {
     triggerToast('Log entry removed.');
   };
 
+  const handleDeleteWorkoutEntry = (id: string) => {
+    const updatedWorkouts = workouts.filter(w => w.id !== id);
+    setWorkouts(updatedWorkouts);
+    storage.saveWorkouts(updatedWorkouts);
+    triggerToast('Workout entry removed.');
+  };
+
   const handleImportJson = (jsonData: string): boolean => {
     try {
       const parsed = JSON.parse(jsonData);
       if (Array.isArray(parsed.logs) && parsed.goals) {
         storage.saveLogs(parsed.logs);
         storage.saveGoals(parsed.goals);
+        if (parsed.workouts) {
+          storage.saveWorkouts(parsed.workouts);
+          setWorkouts(parsed.workouts);
+        } else {
+          storage.saveWorkouts([]);
+          setWorkouts([]);
+        }
         if (parsed.geminiKey) storage.saveGeminiKey(parsed.geminiKey);
         if (parsed.coachPersonality) storage.saveCoach(parsed.coachPersonality);
         return true;
@@ -157,7 +207,8 @@ export const App: React.FC = () => {
   const handleClearData = () => {
     storage.clearAll();
     setLogs([]);
-    setGoals({ calories: 2000, protein: 130, carbs: 220, fat: 65 });
+    setWorkouts([]);
+    setGoals({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300 });
     setGeminiKey('');
     setCoachPersonality('encouraging');
   };
@@ -187,6 +238,7 @@ export const App: React.FC = () => {
   // Get raw serialization strings for backup downloads
   const backupJsonString = JSON.stringify({
     logs,
+    workouts,
     goals,
     geminiKey,
     coachPersonality
@@ -255,11 +307,17 @@ export const App: React.FC = () => {
       {/* 3. Dynamic Tab Portals */}
       <main style={{ flex: 1, marginBottom: '3rem' }}>
         {activeTab === 'dashboard' && (
-          <Dashboard logs={logs} goals={goals} />
+          <Dashboard logs={logs} workouts={workouts} goals={goals} />
         )}
         
         {activeTab === 'timeline' && (
-          <FoodTimeline logs={logs} onDeleteLog={handleDeleteLogEntry} goals={goals} />
+          <FoodTimeline 
+            logs={logs} 
+            workouts={workouts} 
+            onDeleteLog={handleDeleteLogEntry} 
+            onDeleteWorkout={handleDeleteWorkoutEntry} 
+            goals={goals} 
+          />
         )}
         
         {activeTab === 'analytics' && (
@@ -286,7 +344,9 @@ export const App: React.FC = () => {
         isOpen={refinementOpen}
         onClose={() => setRefinementOpen(false)}
         parsedItems={stagedItems}
-        onSave={handleConfirmSaveMeal}
+        parsedWorkout={stagedWorkout}
+        logType={stagedLogType}
+        onSave={handleConfirmSave}
         coachingMessage={stagedCoaching}
         apiKey={geminiKey}
         personality={coachPersonality}
