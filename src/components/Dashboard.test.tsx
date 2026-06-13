@@ -65,6 +65,16 @@ describe('Dashboard', () => {
     expect(onSaveGoals).toHaveBeenCalled();
   });
 
+  it('offers to restore a hidden panel', () => {
+    const onSaveAppSettings = vi.fn();
+    const s: AppSettings = { ...settings, visibleWidgets: { ...settings.visibleWidgets, macros: false } };
+    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={s} onTriggerCustomize={() => {}} onSaveAppSettings={onSaveAppSettings} />);
+    const restore = screen.getByRole('button', { name: 'Restore Macronutrients panel' });
+    fireEvent.click(restore);
+    expect(onSaveAppSettings).toHaveBeenCalled();
+    expect(onSaveAppSettings.mock.calls.at(-1)![0].visibleWidgets.macros).toBe(true);
+  });
+
   it('renders custom micros, summing data-backed values from logged food', () => {
     const meal: MealLog = { id: 'm', timestamp: Date.now(), mealType: 'lunch', items: [{ id: 'i', name: 'Cereal', quantity: '1', calories: 200, protein: 4, carbs: 40, fat: 2, addedSugar: 12, fiber: 5, confidence: 'high' }] };
     render(<Dashboard logs={[meal]} workouts={[]} goals={goals} appSettings={settings} onTriggerCustomize={() => {}} />);

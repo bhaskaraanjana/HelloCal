@@ -520,6 +520,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
         })}
       </div>
 
+      {/* Restore hidden panels */}
+      {DEFAULT_ORDER.some((k) => (appSettings.visibleWidgets as Record<string, boolean | undefined>)[k] === false) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>Hidden:</span>
+          {DEFAULT_ORDER.filter((k) => (appSettings.visibleWidgets as Record<string, boolean | undefined>)[k] === false).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => patchSettings({ visibleWidgets: { ...appSettings.visibleWidgets, [k]: true } })}
+              aria-label={`Restore ${PANEL_META[k].title} panel`}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.7rem', borderRadius: '99px', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              <Plus size={12} /> {PANEL_META[k].title}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Per-panel settings drawer (bottom-sheet on mobile via CSS) */}
       {settingsKey && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`${PANEL_META[settingsKey as PanelKey].title} settings`} onClick={() => setSettingsKey(null)}>
