@@ -56,7 +56,7 @@ export const RingProgress: React.FC<RingProgressProps> = ({
             filter: `drop-shadow(0 0 6px ${ringGlow})`,
             opacity: 0.8,
             transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-            animation: isOver ? 'ringPulseWarning 1.6s ease-in-out infinite' : undefined
+            animation: isOver ? 'ringPulseWarning 2.4s ease-in-out infinite' : undefined
           }}
         />
         {/* Foreground Circle */}

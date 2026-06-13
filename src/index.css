@@ -763,6 +763,6 @@ textarea:focus-visible {
 /* Over-budget warning pulse for the calorie ring */
 @keyframes ringPulseWarning {
   0%, 100% { filter: drop-shadow(0 0 4px var(--accent-rose-glow)); }
-  50% { filter: drop-shadow(0 0 12px var(--accent-rose-glow)); }
+  50% { filter: drop-shadow(0 0 8px var(--accent-rose-glow)); }
 }
 
