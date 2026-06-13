@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>HaloCal</string>
+        <string>HelloCal</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -46,13 +46,13 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>HaloCal uses the camera to scan your meals and nutrition labels for instant AI calorie tracking.</string>
+	<string>HelloCal uses the camera to scan your meals and nutrition labels for instant AI calorie tracking.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HaloCal lets you pick a food photo from your library to scan its nutrition.</string>
+	<string>HelloCal lets you pick a food photo from your library to scan its nutrition.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>HaloCal can save meal photos you capture.</string>
+	<string>HelloCal can save meal photos you capture.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>HaloCal uses the microphone so you can log meals and workouts hands-free with your voice.</string>
+	<string>HelloCal uses the microphone so you can log meals and workouts hands-free with your voice.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

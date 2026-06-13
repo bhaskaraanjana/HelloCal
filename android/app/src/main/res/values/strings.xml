@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">HaloCal</string>
-    <string name="title_activity_main">HaloCal</string>
-    <string name="package_name">com.halocal.app</string>
-    <string name="custom_url_scheme">com.halocal.app</string>
+    <string name="app_name">HelloCal</string>
+    <string name="title_activity_main">HelloCal</string>
+    <string name="package_name">com.hellocal.app</string>
+    <string name="custom_url_scheme">com.hellocal.app</string>
 </resources>
