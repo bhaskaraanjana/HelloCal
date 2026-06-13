@@ -208,7 +208,8 @@ export const gemini = {
     currentWorkout: Omit<WorkoutLog, 'id'> | null,
     blob: Blob,
     apiKey: string,
-    personality: CoachPersonality
+    personality: CoachPersonality,
+    weightKg?: number
   ): Promise<CoachResponse> {
     if (!apiKey) throw new Error('Gemini API key is required.');
 
@@ -217,7 +218,7 @@ The staged data currently has:
 - Food Items: ${JSON.stringify(currentItems, null, 2)}
 - Workout: ${currentWorkout ? JSON.stringify(currentWorkout, null, 2) : 'None'}
 
-The user spoke this correction, subtraction, or addition in the uploaded audio recording. Analyze it and output the updated full JSON containing type, items, and workout.
+The user spoke this correction, subtraction, or addition in the uploaded audio recording. Analyze it and output the updated full JSON containing type, items, and workout.${weightNote(weightKg)}
 Requested personality: "${sanitizePersonality(personality)}".`;
 
     const text = await runModel(apiKey, [
@@ -232,7 +233,8 @@ Requested personality: "${sanitizePersonality(personality)}".`;
     currentWorkout: Omit<WorkoutLog, 'id'> | null,
     text: string,
     apiKey: string,
-    personality: CoachPersonality
+    personality: CoachPersonality,
+    weightKg?: number
   ): Promise<CoachResponse> {
     if (!apiKey) throw new Error('Gemini API key is required.');
 
@@ -241,7 +243,7 @@ The staged data currently has:
 - Food Items: ${JSON.stringify(currentItems, null, 2)}
 - Workout: ${currentWorkout ? JSON.stringify(currentWorkout, null, 2) : 'None'}
 
-The user wrote this correction: "${text}". Analyze it and output the updated full JSON containing type, items, and workout.
+The user wrote this correction: "${text}". Analyze it and output the updated full JSON containing type, items, and workout.${weightNote(weightKg)}
 Requested personality: "${sanitizePersonality(personality)}".`;
 
     const response = await runModel(apiKey, [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);

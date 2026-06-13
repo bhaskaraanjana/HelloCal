@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from './types/nutrition';
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
-import { clampGoal, GOAL_BOUNDS } from './services/validation';
+import { clampGoal, GOAL_BOUNDS, coerceFoodItem } from './services/validation';
 import { initNative, haptic, hapticSuccess } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -500,10 +500,31 @@ export const App: React.FC = () => {
             importedGoals[k] = clampGoal(k, Number(parsed.goals[k]), goals[k] ?? GOAL_BOUNDS[k].min);
           }
         });
-        storage.saveLogs(parsed.logs);
+        // Sanitize imported log items through the same coercion the AI path uses,
+        // so a hand-edited/corrupt backup can't persist NaN/garbage that then
+        // renders as "NaN" in the timeline. Drop items/logs that don't survive.
+        const validatedLogs: MealLog[] = (parsed.logs as any[])
+          .map((log) => ({
+            id: typeof log?.id === 'string' && log.id ? log.id : `meal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            timestamp: Number(log?.timestamp) || Date.now(),
+            mealType: ['breakfast', 'lunch', 'dinner', 'snack'].includes(log?.mealType) ? log.mealType : 'snack',
+            items: Array.isArray(log?.items)
+              ? log.items
+                  .map((it: any) => {
+                    const c = coerceFoodItem(it);
+                    return c
+                      ? { ...c, id: typeof it?.id === 'string' && it.id ? it.id : `item_${Date.now()}_${Math.random().toString(36).slice(2, 5)}` }
+                      : null;
+                  })
+                  .filter(Boolean)
+              : [],
+          }))
+          .filter((l) => l.items.length > 0) as MealLog[];
+
+        storage.saveLogs(validatedLogs);
         storage.saveGoals(importedGoals);
         // Reflect imported logs/goals in the UI immediately (previously only persisted).
-        setLogs(parsed.logs);
+        setLogs(validatedLogs);
         setGoals(importedGoals);
         if (parsed.workouts) {
           storage.saveWorkouts(parsed.workouts);
@@ -1018,6 +1039,7 @@ export const App: React.FC = () => {
         calorieGoal={goals.calories || 2000}
         consumedToday={todayConsumedCalories}
         onSaveTemplate={handleSaveTemplate}
+        weightKg={profile.weightKg}
       />
 
       {/* 5. Sleek Toast Notification Banner */}

@@ -17,6 +17,7 @@ interface RefinementModalProps {
   calorieGoal?: number;
   consumedToday?: number;
   onSaveTemplate?: (name: string, items: Omit<FoodItem, 'id'>[]) => void;
+  weightKg?: number;
 }
 
 export const RefinementModal: React.FC<RefinementModalProps> = ({
@@ -31,7 +32,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   personality,
   calorieGoal,
   consumedToday = 0,
-  onSaveTemplate
+  onSaveTemplate,
+  weightKg
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
@@ -201,7 +203,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
     }
 
     try {
-      const res = await gemini.correctVoice(items, workout, blob, apiKey, personality);
+      const res = await gemini.correctVoice(items, workout, blob, apiKey, personality, weightKg);
       setItems(res.items || []);
       if (res.workout) setWorkout(res.workout);
       if (res.type) setModalLogType(res.type);
@@ -226,7 +228,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
     try {
       if (apiKey) {
-        const res = await gemini.correctText(items, workout, query, apiKey, personality);
+        const res = await gemini.correctText(items, workout, query, apiKey, personality, weightKg);
         setItems(res.items || []);
         if (res.workout) setWorkout(res.workout);
         if (res.type) setModalLogType(res.type);

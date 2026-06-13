@@ -92,7 +92,7 @@ const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-function coerceFoodItem(raw: any): Omit<FoodItem, 'id'> | null {
+export function coerceFoodItem(raw: any): Omit<FoodItem, 'id'> | null {
   if (!raw || typeof raw !== 'object') return null;
   const name = typeof raw.name === 'string' ? raw.name.trim() : '';
   if (!name) return null;
