@@ -55,6 +55,13 @@ function scaleFoodItem(item: FoodItem, factor: number): FoodItem {
   return out;
 }
 
+const NAV_TABS = [
+  { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+  { key: 'timeline', label: 'Timeline', Icon: Utensils },
+  { key: 'analytics', label: 'Analytics', Icon: BarChart2 },
+  { key: 'settings', label: 'Settings', Icon: SettingsIcon },
+] as const;
+
 export const App: React.FC = () => {
   // 1. Core States loaded from localStorage on mount
   const [logs, setLogs] = useState<MealLog[]>([]);
@@ -895,38 +902,36 @@ export const App: React.FC = () => {
         </div>
 
         {/* Dynamic Navigation Board */}
-        <nav className="nav-tabs">
-          <button 
-            className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <LayoutDashboard size={16} />
-            <span>Dashboard</span>
-          </button>
-          
-          <button 
-            className={`tab-btn ${activeTab === 'timeline' ? 'active' : ''}`}
-            onClick={() => setActiveTab('timeline')}
-          >
-            <Utensils size={16} />
-            <span>Timeline</span>
-          </button>
-          
-          <button 
-            className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-            onClick={() => setActiveTab('analytics')}
-          >
-            <BarChart2 size={16} />
-            <span>Analytics</span>
-          </button>
-          
-          <button 
-            className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <SettingsIcon size={16} />
-            <span>Settings</span>
-          </button>
+        <nav
+          className="nav-tabs"
+          role="tablist"
+          aria-label="Main sections"
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            e.preventDefault();
+            const idx = NAV_TABS.findIndex((t) => t.key === activeTab);
+            const nextKey = NAV_TABS[e.key === 'ArrowRight'
+              ? (idx + 1) % NAV_TABS.length
+              : (idx - 1 + NAV_TABS.length) % NAV_TABS.length].key;
+            setActiveTab(nextKey);
+            document.getElementById(`tab-${nextKey}`)?.focus();
+          }}
+        >
+          {NAV_TABS.map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              role="tab"
+              id={`tab-${key}`}
+              aria-controls={`panel-${key}`}
+              aria-selected={activeTab === key}
+              tabIndex={activeTab === key ? 0 : -1}
+              className={`tab-btn ${activeTab === key ? 'active' : ''}`}
+              onClick={() => setActiveTab(key)}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+            </button>
+          ))}
         </nav>
       </header>
 
@@ -946,7 +951,7 @@ export const App: React.FC = () => {
       {/* 3. Dynamic Tab Portals */}
       <main style={{ flex: 1, marginBottom: '3rem' }}>
         {activeTab === 'dashboard' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {appSettings.visibleWidgets.streak !== false && (
               <StreakBadge streak={streak} totalDays={lifetimeDays} />
             )}
@@ -979,21 +984,23 @@ export const App: React.FC = () => {
         )}
         
         {activeTab === 'timeline' && (
-          <FoodTimeline
-            logs={logs}
-            workouts={workouts}
-            onDeleteLog={handleDeleteLogEntry}
-            onDeleteWorkout={handleDeleteWorkoutEntry}
-            onEditLog={handleEditLog}
-            onCopyDay={handleCopyDay}
-            onCopyMeal={handleCopyMeal}
-            onScaleItem={handleScaleItem}
-            goals={goals}
-          />
+          <div role="tabpanel" id="panel-timeline" aria-labelledby="tab-timeline">
+            <FoodTimeline
+              logs={logs}
+              workouts={workouts}
+              onDeleteLog={handleDeleteLogEntry}
+              onDeleteWorkout={handleDeleteWorkoutEntry}
+              onEditLog={handleEditLog}
+              onCopyDay={handleCopyDay}
+              onCopyMeal={handleCopyMeal}
+              onScaleItem={handleScaleItem}
+              goals={goals}
+            />
+          </div>
         )}
         
         {activeTab === 'analytics' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div role="tabpanel" id="panel-analytics" aria-labelledby="tab-analytics" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <Suspense fallback={
               <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
                 Loading analytics…
@@ -1011,17 +1018,19 @@ export const App: React.FC = () => {
         )}
         
         {activeTab === 'settings' && (
-          <Settings 
-            apiKey={geminiKey}
-            personality={coachPersonality}
-            goals={goals}
-            onSaveKey={handleSaveKey}
-            onSavePersonality={handleSavePersonality}
-            onSaveGoals={handleSaveGoals}
-            onClearData={handleClearData}
-            onImportData={handleImportJson}
-            exportDataJson={backupJsonString}
-          />
+          <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings">
+            <Settings
+              apiKey={geminiKey}
+              personality={coachPersonality}
+              goals={goals}
+              onSaveKey={handleSaveKey}
+              onSavePersonality={handleSavePersonality}
+              onSaveGoals={handleSaveGoals}
+              onClearData={handleClearData}
+              onImportData={handleImportJson}
+              exportDataJson={backupJsonString}
+            />
+          </div>
         )}
       </main>
 
