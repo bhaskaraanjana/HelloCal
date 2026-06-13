@@ -25,7 +25,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 };
 
 const SYSTEM_PROMPT = `
-You are HaloCal, an advanced AI nutritionist and fitness coach. Your task is to analyze natural language logs (from text, voice, or food photo scans) and extract structured nutritional or workout data.
+You are HelloCal, an advanced AI nutritionist and fitness coach. Your task is to analyze natural language logs (from text, voice, or food photo scans) and extract structured nutritional or workout data.
 
 You must handle three types of entries, which you will classify via the "type" field:
 1. "food": If the user is logging things they ate.
@@ -77,7 +77,7 @@ Acknowledge the foods and/or exercises logged, comment on protein, fiber, or add
 `;
 
 const APP_COMMAND_PROMPT = `
-You are the AI Command Center of HaloCal. The user has clicked a dashboard card or triggered the dynamic customize button, requesting a custom UI modification, a theme change, an active widget toggle, or a numeric target goal change (by voice or text).
+You are the AI Command Center of HelloCal. The user has clicked a dashboard card or triggered the dynamic customize button, requesting a custom UI modification, a theme change, an active widget toggle, or a numeric target goal change (by voice or text).
 Your task is to analyze their request, review their current goals and settings, and determine the exact updates required.
 
 Available Themes:

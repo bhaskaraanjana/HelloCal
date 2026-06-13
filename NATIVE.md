@@ -1,6 +1,6 @@
-# HaloCal — Native iOS & Android (Capacitor)
+# HelloCal — Native iOS & Android (Capacitor)
 
-HaloCal ships as a real App Store / Play Store app by wrapping the Vite PWA in
+HelloCal ships as a real App Store / Play Store app by wrapping the Vite PWA in
 [Capacitor](https://capacitorjs.com). The same React codebase powers web, iOS, and Android.
 
 ## Architecture
@@ -69,8 +69,8 @@ Ubuntu and the iOS app on a macOS runner. Add signing secrets in the repo settin
 
 ## App identity
 
-- App ID: `com.halocal.app`
-- App name: `HaloCal`
+- App ID: `com.hellocal.app`
+- App name: `HelloCal`
 - Config: `capacitor.config.ts`
 
 ## TODO (store-readiness polish)

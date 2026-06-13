@@ -44,7 +44,7 @@ describe('searchFoods', () => {
     const res = await searchFoods('bar');
     expect(res).toHaveLength(1);
     expect(res[0].item.calories).toBe(200);
-    expect(localStorage.getItem('halocal_search_cache_bar')).toBeTruthy();
+    expect(localStorage.getItem('hellocal_search_cache_bar')).toBeTruthy();
   });
 
   it('serves the cache when a later fetch fails (offline)', async () => {

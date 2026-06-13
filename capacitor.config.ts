@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.halocal.app',
-  appName: 'HaloCal',
+  appId: 'com.hellocal.app',
+  appName: 'HelloCal',
   webDir: 'dist',
   backgroundColor: '#0a0b10',
   plugins: {

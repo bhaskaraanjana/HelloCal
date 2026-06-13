@@ -22,7 +22,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // Surface for debugging; no remote logging (serverless/private by design).
-    console.error('HaloCal crashed:', error, info.componentStack);
+    console.error('HelloCal crashed:', error, info.componentStack);
   }
 
   private handleReload = () => {
@@ -53,7 +53,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         <div style={{ fontSize: '2.5rem' }}>🟡</div>
         <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Something went wrong</h1>
         <p style={{ color: 'var(--text-secondary, #9aa6b8)', fontSize: '0.95rem', maxWidth: '420px', lineHeight: 1.5, margin: 0 }}>
-          HaloCal hit an unexpected error, but your logged data is safe on this device.
+          HelloCal hit an unexpected error, but your logged data is safe on this device.
           Reloading usually fixes it.
         </p>
         <button
@@ -70,7 +70,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             background: 'var(--accent-purple, #8b5cf6)',
           }}
         >
-          Reload HaloCal
+          Reload HelloCal
         </button>
       </div>
     );

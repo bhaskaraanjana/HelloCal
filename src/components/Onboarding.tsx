@@ -201,7 +201,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Welcome to HaloCal
+            Welcome to HelloCal
           </h2>
           <p style={{ color: 'var(--text-secondary)', margin: '0.5rem 0 0 0', fontSize: '0.95rem' }}>
             Let&apos;s personalize your targets in a few quick taps.

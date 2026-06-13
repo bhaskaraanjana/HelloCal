@@ -7,7 +7,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const DISMISS_KEY = 'halocal_install_dismissed';
+const DISMISS_KEY = 'hellocal_install_dismissed';
 
 /**
  * Custom "Add to Home Screen" prompt. Captures the beforeinstallprompt event,
@@ -62,7 +62,7 @@ export const InstallPrompt: React.FC = () => {
   return (
     <div
       role="dialog"
-      aria-label="Install HaloCal"
+      aria-label="Install HelloCal"
       style={{
         position: 'fixed',
         left: '50%',
@@ -101,7 +101,7 @@ export const InstallPrompt: React.FC = () => {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-          Install HaloCal
+          Install HelloCal
         </div>
         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
           Add to your home screen for instant, full-screen tracking.

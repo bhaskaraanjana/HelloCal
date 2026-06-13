@@ -34,7 +34,7 @@ const MEAL_SLOTS: { key: MealSlot; label: string }[] = [
 
 // In-progress edits are mirrored to sessionStorage so an accidental close (or a
 // failed correction the user gives up on) doesn't lose a complex meal.
-const DRAFT_KEY = 'halocal_refine_draft';
+const DRAFT_KEY = 'hellocal_refine_draft';
 const DRAFT_TTL = 30 * 60 * 1000;
 interface RefineDraft {
   items: Omit<FoodItem, 'id'>[];

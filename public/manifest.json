@@ -1,6 +1,6 @@
 {
-  "name": "HaloCal - AI Voice Calorie Tracker",
-  "short_name": "HaloCal",
+  "name": "HelloCal - AI Voice Calorie Tracker",
+  "short_name": "HelloCal",
   "description": "Smart AI voice, photo & barcode calorie and macro tracker. Private & serverless.",
   "id": "/",
   "start_url": "/",

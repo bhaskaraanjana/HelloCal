@@ -194,7 +194,7 @@ export const App: React.FC = () => {
     ];
     const tick = () => {
       const now = new Date();
-      const dayKey = `halocal_reminded_${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      const dayKey = `hellocal_reminded_${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
       let fired: Record<string, boolean> = {};
       try { fired = JSON.parse(localStorage.getItem(dayKey) || '{}'); } catch { fired = {}; }
       const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -203,7 +203,7 @@ export const App: React.FC = () => {
         if (!hm) continue;
         const elapsed = nowMin - (hm.hour * 60 + hm.minute);
         if (!fired[slot] && elapsed >= 0 && elapsed <= 90) {
-          showLocalNotification(title, 'Tap to log your meal in HaloCal.');
+          showLocalNotification(title, 'Tap to log your meal in HelloCal.');
           fired[slot] = true;
           try { localStorage.setItem(dayKey, JSON.stringify(fired)); } catch { /* ignore */ }
         }
@@ -876,10 +876,10 @@ export const App: React.FC = () => {
       }}>
         <img 
           src="/favicon.png" 
-          alt="HaloCal Logo" 
+          alt="HelloCal Logo" 
           className="loading-logo"
         />
-        <span>Powering HaloCal...</span>
+        <span>Powering HelloCal...</span>
       </div>
     );
   }
@@ -921,7 +921,7 @@ export const App: React.FC = () => {
         <div className="logo-container">
           <img 
             src="/favicon.png" 
-            alt="HaloCal Logo" 
+            alt="HelloCal Logo" 
             className="header-logo"
           />
           <h1 className="logo-text">Halo<span>Cal</span></h1>
@@ -1169,7 +1169,7 @@ export const App: React.FC = () => {
         justifyContent: 'center',
         gap: '0.4rem'
       }}>
-        <span>HaloCal 🟡 Serverless & Private. Made with</span>
+        <span>HelloCal 🟡 Serverless & Private. Made with</span>
         <Heart size={10} color="var(--accent-rose)" fill="var(--accent-rose)" />
         <span>for healthier days.</span>
       </footer>

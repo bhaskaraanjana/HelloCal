@@ -11,7 +11,7 @@ interface FoodSearchDrawerProps {
   onPick: (item: Omit<FoodItem, 'id'>) => void;
 }
 
-const RECENTS_KEY = 'halocal_food_search_recents';
+const RECENTS_KEY = 'hellocal_food_search_recents';
 
 /**
  * Free-text food search against the Open Food Facts database. Debounced, with an

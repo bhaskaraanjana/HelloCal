@@ -33,7 +33,7 @@ function productToItem(p: any): Omit<FoodItem, 'id'> | null {
   const fat = Math.round(num(get('fat')) * 10) / 10;
   const sugar = Math.round(num(get('sugars')) * 10) / 10;
   const fiber = Math.round(num(get('fiber')) * 10) / 10;
-  // OFF stores sodium in grams; HaloCal tracks mg.
+  // OFF stores sodium in grams; HelloCal tracks mg.
   const sodium = Math.round(num(get('sodium')) * 1000);
 
   // If there is no usable energy value the record is too sparse to be useful.
@@ -57,7 +57,7 @@ function productToItem(p: any): Omit<FoodItem, 'id'> | null {
 
 // Cache successful barcode lookups for a week — repeat scans of the same product
 // (very common: pantry staples) then resolve instantly instead of re-hitting OFF.
-const BARCODE_CACHE_PREFIX = 'halocal_barcode_cache_';
+const BARCODE_CACHE_PREFIX = 'hellocal_barcode_cache_';
 const BARCODE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
 function readBarcodeCache(barcode: string): FoodDbResult | null {
@@ -113,7 +113,7 @@ export async function lookupBarcode(barcode: string): Promise<FoodDbResult | nul
   return result;
 }
 
-const SEARCH_CACHE_PREFIX = 'halocal_search_cache_';
+const SEARCH_CACHE_PREFIX = 'hellocal_search_cache_';
 const SEARCH_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
 function readSearchCache(key: string): FoodDbResult[] | null {

@@ -95,10 +95,10 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleExport = () => {
-    const filename = `halocal_backup_${new Date().toISOString().split('T')[0]}.json`;
+    const filename = `hellocal_backup_${new Date().toISOString().split('T')[0]}.json`;
     // On native, use the share sheet (saves to Files/Drive/email); on web, downloads the file.
     if (isNative()) {
-      shareText('HaloCal Backup', exportDataJson, filename);
+      shareText('HelloCal Backup', exportDataJson, filename);
       return;
     }
     const blob = new Blob([exportDataJson], { type: 'application/json' });
@@ -158,7 +158,7 @@ export const Settings: React.FC<SettingsProps> = ({
         </h3>
         
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-          HaloCal processes standard transcripts offline. However, to unlock the <strong>Multimodal Microphone Recording</strong> (whisper tracking, auto serving-sizes, conversational coaching), you must enter a Gemini API Key. 
+          HelloCal processes standard transcripts offline. However, to unlock the <strong>Multimodal Microphone Recording</strong> (whisper tracking, auto serving-sizes, conversational coaching), you must enter a Gemini API Key. 
           You can get a free personal API key in seconds from the <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-purple)', textDecoration: 'none', fontWeight: 650 }}>Google AI Studio Portal</a>.
         </p>
 
@@ -426,7 +426,7 @@ export const Settings: React.FC<SettingsProps> = ({
           <Bell size={18} color="var(--accent-purple)" /> Meal Reminders
         </h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-          Gentle daily nudges to log your meals.{!isNative() && ' On the web, reminders fire only while HaloCal is open in a tab — install the app for true background reminders.'}
+          Gentle daily nudges to log your meals.{!isNative() && ' On the web, reminders fire only while HelloCal is open in a tab — install the app for true background reminders.'}
         </p>
         <form onSubmit={handleSaveReminders} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>

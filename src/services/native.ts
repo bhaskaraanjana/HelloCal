@@ -60,7 +60,7 @@ export async function hapticSuccess(): Promise<void> {
  * Share text/JSON. Uses the native share sheet on device and the Web Share API
  * (or a download fallback) in the browser.
  */
-export async function shareText(title: string, text: string, filename = 'halocal-backup.json'): Promise<boolean> {
+export async function shareText(title: string, text: string, filename = 'hellocal-backup.json'): Promise<boolean> {
   if (isNative()) {
     try {
       const { Share } = await import('@capacitor/share');
@@ -102,9 +102,9 @@ export async function shareText(title: string, text: string, filename = 'halocal
 type ReminderDef = { id: number; slot: 'breakfast' | 'lunch' | 'dinner'; time: string; title: string; body: string };
 
 const reminderDefs = (r: MealReminders): ReminderDef[] => [
-  { id: 1, slot: 'breakfast', time: r.breakfast, title: '🍳 Breakfast time', body: 'Log your breakfast in HaloCal to stay on your halo.' },
-  { id: 2, slot: 'lunch', time: r.lunch, title: '🥗 Lunch check-in', body: 'Got a minute? Log your lunch in HaloCal.' },
-  { id: 3, slot: 'dinner', time: r.dinner, title: '🍱 Dinner time', body: 'Round out your day — log dinner in HaloCal.' },
+  { id: 1, slot: 'breakfast', time: r.breakfast, title: '🍳 Breakfast time', body: 'Log your breakfast in HelloCal to stay on your halo.' },
+  { id: 2, slot: 'lunch', time: r.lunch, title: '🥗 Lunch check-in', body: 'Got a minute? Log your lunch in HelloCal.' },
+  { id: 3, slot: 'dinner', time: r.dinner, title: '🍱 Dinner time', body: 'Round out your day — log dinner in HelloCal.' },
 ];
 
 export const parseHM = (hm: string): { hour: number; minute: number } | null => {

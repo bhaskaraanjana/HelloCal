@@ -2,21 +2,22 @@ import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, App
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics } from './sanitize';
 
 // Bump when the on-disk shape changes in a way that needs a migration step.
-const SCHEMA_VERSION = 1;
+// v2: rebrand HaloCal -> HelloCal migrated localStorage keys halocal_* -> hellocal_*.
+const SCHEMA_VERSION = 2;
 
 const KEYS = {
-  LOGS: 'halocal_logs',
-  WORKOUTS: 'halocal_workouts',
-  GOALS: 'halocal_goals',
-  GEMINI_KEY: 'halocal_gemini_key',
-  COACH: 'halocal_coach',
-  SETTINGS: 'halocal_app_settings',
-  WATER: 'halocal_water',
-  BODY: 'halocal_body_metrics',
-  FAVORITES: 'halocal_favorites',
-  PROFILE: 'halocal_profile',
-  TEMPLATES: 'halocal_meal_templates',
-  VERSION: 'halocal_schema_version'
+  LOGS: 'hellocal_logs',
+  WORKOUTS: 'hellocal_workouts',
+  GOALS: 'hellocal_goals',
+  GEMINI_KEY: 'hellocal_gemini_key',
+  COACH: 'hellocal_coach',
+  SETTINGS: 'hellocal_app_settings',
+  WATER: 'hellocal_water',
+  BODY: 'hellocal_body_metrics',
+  FAVORITES: 'hellocal_favorites',
+  PROFILE: 'hellocal_profile',
+  TEMPLATES: 'hellocal_meal_templates',
+  VERSION: 'hellocal_schema_version'
 };
 
 const DEFAULT_GOALS: UserGoals = {
@@ -114,14 +115,27 @@ export const storage = {
 
   /**
    * Apply any pending schema migrations and stamp the current version. Called
-   * once on app init. No migrations exist yet (v1 is the baseline); the framework
-   * is here so future on-disk changes have a clean, versioned upgrade path.
+   * once on app init.
+   * v2: the HaloCal -> HelloCal rebrand renamed every localStorage key from
+   * `halocal_*` to `hellocal_*`; copy any legacy values forward so existing users
+   * keep their data. Non-destructive (legacy keys are left in place).
    */
   migrate(): void {
     try {
       const stored = Number(localStorage.getItem(KEYS.VERSION) || '0');
       if (stored >= SCHEMA_VERSION) return;
-      // Future: switch on `stored` to transform older shapes here.
+
+      if (stored < 2) {
+        for (const key of Object.values(KEYS)) {
+          if (key === KEYS.VERSION) continue;
+          const legacy = key.replace('hellocal_', 'halocal_');
+          if (legacy !== key && localStorage.getItem(key) === null) {
+            const old = localStorage.getItem(legacy);
+            if (old !== null) localStorage.setItem(key, old);
+          }
+        }
+      }
+
       localStorage.setItem(KEYS.VERSION, String(SCHEMA_VERSION));
     } catch {
       /* ignore — versioning is best-effort */

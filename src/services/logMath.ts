@@ -21,7 +21,7 @@ export function scaleNutrients<T extends object>(item: T, factor: number): T {
   return out as unknown as T;
 }
 
-/** The meal slot HaloCal auto-assigns from a local time (defaults to now). */
+/** The meal slot HelloCal auto-assigns from a local time (defaults to now). */
 export function autoMealSlot(now: Date = new Date()): MealLog['mealType'] {
   const hour = now.getHours();
   if (hour >= 4 && hour < 11) return 'breakfast';
