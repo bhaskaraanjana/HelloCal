@@ -99,4 +99,41 @@ describe('Dashboard', () => {
     const lastCall = onSaveAppSettings.mock.calls.at(-1)![0];
     expect(lastCall.customMicros.some((m: { fieldKey: string }) => m.fieldKey === 'iron')).toBe(true);
   });
+
+  it('canonicalizes a multi-word backed micro to the camelCase FoodItem key', async () => {
+    const onSaveAppSettings = vi.fn();
+    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={settings} onTriggerCustomize={() => {}} onSaveAppSettings={onSaveAppSettings} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Micronutrients settings' }));
+    fireEvent.change(screen.getByLabelText('New micronutrient name'), { target: { value: 'Added Sugar' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add micronutrient' }));
+    // addMicro is async (awaits the offline default). Wait for the save.
+    await vi.waitFor(() => expect(onSaveAppSettings).toHaveBeenCalled());
+    const added = onSaveAppSettings.mock.calls.at(-1)![0].customMicros.find((m: { name: string }) => m.name === 'Added Sugar');
+    expect(added.fieldKey).toBe('addedSugar'); // not 'addedsugar'
+    expect(added.unit).toBe('g');
+  });
+
+  it('auto-tracks a data-backed custom micro instead of showing "not auto-tracked"', () => {
+    const meal: MealLog = { id: 'm', timestamp: Date.now(), mealType: 'lunch', items: [{ id: 'i', name: 'Cereal', quantity: '1', calories: 200, protein: 4, carbs: 40, fat: 2, addedSugar: 12, confidence: 'high' }] };
+    const s: AppSettings = { ...settings, customMicros: [{ id: 'mk', name: 'Added Sugar', emoji: '🍭', unit: 'g', dailyLimit: 30, isLimit: true, color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)', fieldKey: 'addedSugar' }] };
+    render(<Dashboard logs={[meal]} workouts={[]} goals={goals} appSettings={s} onTriggerCustomize={() => {}} />);
+    expect(screen.getByText(/Added Sugar/)).toBeTruthy();
+    expect(screen.queryByText(/Not auto-tracked from foods/i)).toBeNull();
+  });
+
+  it('closes the per-panel settings drawer on Escape', () => {
+    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={settings} onTriggerCustomize={() => {}} onSaveGoals={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Daily Halo settings' }));
+    expect(screen.getByRole('dialog', { name: /Daily Halo settings/i })).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: /Daily Halo settings/i })).toBeNull();
+  });
+
+  it('reorders panels via arrow keys on the grip (keyboard a11y)', () => {
+    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={settings} onTriggerCustomize={() => {}} />);
+    const grip = screen.getByRole('button', { name: /Drag Daily Halo panel/ });
+    fireEvent.keyDown(grip, { key: 'ArrowDown' });
+    const order = JSON.parse(localStorage.getItem('hellocal_dashboard_order') || '[]');
+    expect(order[0]).not.toBe('calorieHalo'); // Daily Halo moved down one slot
+  });
 });

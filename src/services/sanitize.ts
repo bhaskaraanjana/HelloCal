@@ -158,6 +158,27 @@ export function sanitizeHydrationLogs(raw: unknown): HydrationLog[] {
   return out;
 }
 
+/**
+ * Map a lowercased/alnum-stripped nutrient key to the exact camelCase FoodItem
+ * property so a custom micro auto-tracks real intake. Without this, "Added Sugar"
+ * normalizes to 'addedsugar' which never matches the camelCase 'addedSugar' field.
+ * Exported so the dashboard's add-micro path canonicalizes identically.
+ */
+export const MICRO_FIELD_ALIASES: Record<string, string> = {
+  addedsugar: 'addedSugar',
+  dietaryfiber: 'fiber',
+  fiber: 'fiber',
+  totalsugar: 'sugar',
+  sugar: 'sugar',
+  sodium: 'sodium',
+  iron: 'iron',
+  protein: 'protein',
+  carbs: 'carbs',
+  carbohydrates: 'carbs',
+  fat: 'fat',
+  calories: 'calories',
+};
+
 /** Coerce raw custom micronutrient definitions; drops entries missing name/fieldKey. */
 export function sanitizeCustomMicros(raw: unknown): CustomMicro[] {
   if (!Array.isArray(raw)) return [];
@@ -166,8 +187,11 @@ export function sanitizeCustomMicros(raw: unknown): CustomMicro[] {
     if (!m || typeof m !== 'object') continue;
     const o = m as Record<string, unknown>;
     const name = typeof o.name === 'string' ? o.name.trim() : '';
-    const fieldKey = typeof o.fieldKey === 'string' ? o.fieldKey.trim() : '';
+    let fieldKey = typeof o.fieldKey === 'string' ? o.fieldKey.trim() : '';
     if (!name || !fieldKey) continue;
+    // Heal a legacy lowercase backed key (e.g. 'addedsugar' -> 'addedSugar') so
+    // already-persisted micros start auto-tracking after this fix.
+    fieldKey = MICRO_FIELD_ALIASES[fieldKey.toLowerCase()] ?? fieldKey;
     out.push({
       id: strId(o.id, 'micro'),
       name,

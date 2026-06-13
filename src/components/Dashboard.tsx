@@ -1,10 +1,12 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { MealLog, WorkoutLog, UserGoals, AppSettings, CustomMicro } from '../types/nutrition';
 import RingProgress from './ui/RingProgress';
 import ProgressBar from './ui/ProgressBar';
 import { computeDailyTotals, sumFieldKey } from '../services/dailyTotals';
 import { gemini } from '../services/gemini';
+import { MICRO_FIELD_ALIASES } from '../services/sanitize';
 import { useDraggablePanels } from '../hooks/useDraggablePanels';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { Flame, Trophy, Calendar, Sparkles, GripVertical, SlidersHorizontal, ChevronUp, ChevronDown, X, EyeOff, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 // FoodItem numeric fields the AI parser actually populates — the ONLY keys for
@@ -96,10 +98,42 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const { draggedKey, handlePointerDown, handlePointerMove, endDrag } = useDraggablePanels(panelOrder, persistOrder);
 
+  // Keyboard-accessible reorder: move a panel one slot among the VISIBLE panels
+  // (drag is pointer-only, so arrow keys on the grip are the only a11y path).
+  const movePanelByKey = (key: string, dir: -1 | 1) => {
+    const vis = panelOrder.filter((k) => (appSettings.visibleWidgets as Record<string, boolean | undefined>)[k] !== false);
+    const vi = vis.indexOf(key);
+    const vj = vi + dir;
+    if (vi < 0 || vj < 0 || vj >= vis.length) return;
+    // Translate the visible-list swap back to absolute positions in panelOrder.
+    const a = panelOrder.indexOf(vis[vi]);
+    const b = panelOrder.indexOf(vis[vj]);
+    if (a < 0 || b < 0) return;
+    const next = [...panelOrder];
+    [next[a], next[b]] = [next[b], next[a]];
+    persistOrder(next);
+  };
+
   // --- Per-panel settings drawer ---
   const [settingsKey, setSettingsKey] = useState<string | null>(null);
   const [draftGoals, setDraftGoals] = useState<UserGoals>(goals);
   useEffect(() => { if (settingsKey) setDraftGoals(goals); }, [settingsKey, goals]);
+
+  // Modal hygiene for the settings drawer: trap focus, close on Escape, lock body
+  // scroll — matching RefinementModal so the drawer isn't an a11y/scroll regression.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(!!settingsKey, drawerRef);
+  useEffect(() => {
+    if (!settingsKey) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettingsKey(null); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [settingsKey]);
 
   const applyGoals = () => { onSaveGoals?.(draftGoals); setSettingsKey(null); };
   const patchSettings = (patch: Partial<AppSettings>) => onSaveAppSettings?.({ ...appSettings, ...patch });
@@ -133,10 +167,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
         try { info = { ...info, ...(await gemini.fetchMicronutrientInfo(name, apiKey)) }; }
         catch { onError?.('Could not fetch nutrient info — added with defaults.'); }
       }
-      const fieldKey = info.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const norm = info.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Resolve to the exact camelCase FoodItem key so a backed nutrient ("Added
+      // Sugar" -> 'addedSugar') auto-tracks instead of falling into "not tracked".
+      const fieldKey = MICRO_FIELD_ALIASES[norm] ?? norm;
+      // For data-backed fields the HUD sums the raw FoodItem value (fixed unit:
+      // mg for sodium/iron, g otherwise), so force that unit rather than trust the AI.
+      const unit = DATA_BACKED_FIELDS.has(fieldKey)
+        ? (fieldKey === 'sodium' || fieldKey === 'iron' ? 'mg' : 'g')
+        : (info.unit || 'g');
       saveMicros([...customMicros, {
         id: `micro_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        name: info.name, emoji: info.emoji || '🔬', unit: info.unit || 'g',
+        name: info.name, emoji: info.emoji || '🔬', unit,
         dailyLimit: Math.max(0, Number(info.dailyLimit) || 0), isLimit: !!info.isLimit,
         color: info.color || 'var(--accent-purple)', glowColor: info.glowColor || 'var(--accent-purple-glow)', fieldKey,
       }]);
@@ -460,7 +502,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       )}
 
       <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-        <GripVertical size={12} /> Drag the handle to reorder · tap a title to collapse · ⚙ for per-panel settings
+        <GripVertical size={12} /> Drag the handle (or focus it and press ↑/↓) to reorder · tap a title to collapse · ⚙ for per-panel settings
       </p>
 
       <div className="dashboard-panel-grid">
@@ -487,12 +529,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <button
                   type="button"
                   className="dashboard-icon-pill"
-                  aria-label={`Drag ${meta.title} panel`}
+                  aria-label={`Drag ${meta.title} panel (press arrow up or down to reorder)`}
                   onPointerDown={handlePointerDown(key)}
                   onPointerMove={handlePointerMove}
                   onPointerUp={endDrag}
                   onPointerCancel={endDrag}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', flexShrink: 0, borderRadius: '9px', background: 'rgba(139,92,246,0.1)', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'grab', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') { e.preventDefault(); movePanelByKey(key, -1); }
+                    else if (e.key === 'ArrowDown') { e.preventDefault(); movePanelByKey(key, 1); }
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', flexShrink: 0, borderRadius: '9px', background: 'rgba(139,92,246,0.1)', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'grab', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
                 >
                   <GripVertical size={16} />
                 </button>
@@ -505,10 +551,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   {meta.icon}
                   {meta.title}
                 </button>
-                <button type="button" onClick={() => setSettingsKey(key)} aria-label={`${meta.title} settings`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', flexShrink: 0, borderRadius: '8px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <button type="button" onClick={() => setSettingsKey(key)} aria-label={`${meta.title} settings`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', flexShrink: 0, borderRadius: '8px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                   <SlidersHorizontal size={15} />
                 </button>
-                <button type="button" onClick={() => toggleCollapse(key)} aria-label={isCollapsed ? `Expand ${meta.title}` : `Collapse ${meta.title}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', flexShrink: 0, borderRadius: '8px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <button type="button" onClick={() => toggleCollapse(key)} aria-label={isCollapsed ? `Expand ${meta.title}` : `Collapse ${meta.title}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', flexShrink: 0, borderRadius: '8px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                   {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                 </button>
               </div>
@@ -541,7 +587,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Per-panel settings drawer (bottom-sheet on mobile via CSS) */}
       {settingsKey && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`${PANEL_META[settingsKey as PanelKey].title} settings`} onClick={() => setSettingsKey(null)}>
-          <div className="panel-settings-drawer" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-secondary, #131520)', border: '1px solid var(--border-glass)', borderRadius: '18px', padding: '1.25rem', width: '420px', maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto' }}>
+          <div ref={drawerRef} className="panel-settings-drawer" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-secondary, #131520)', border: '1px solid var(--border-glass)', borderRadius: '18px', padding: '1.25rem', width: '420px', maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto' }}>
             <div className="bottom-sheet-handle" />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', color: 'var(--text-primary)', margin: 0 }}>
