@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile } from './types/nutrition';
+import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from './types/nutrition';
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
 import { initNative, haptic, hapticSuccess } from './services/native';
@@ -26,6 +26,7 @@ const WeightTracker = React.lazy(() =>
 import { Onboarding } from './components/Onboarding';
 import { InstallPrompt } from './components/InstallPrompt';
 import { FoodSearchDrawer } from './components/FoodSearchDrawer';
+import { MealTemplateBar } from './components/MealTemplateBar';
 
 // Common foods seeded into Quick Add on first run so the fastest repeat-log path
 // isn't empty for brand-new users. Low frequency/lastLogged means real, frequently
@@ -51,6 +52,7 @@ export const App: React.FC = () => {
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetric[]>([]);
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
+  const [mealTemplates, setMealTemplates] = useState<MealTemplate[]>([]);
   const [profile, setProfile] = useState<UserProfile>({});
   const [onboardingOpen, setOnboardingOpen] = useState(false);
 
@@ -134,6 +136,7 @@ export const App: React.FC = () => {
     } else {
       setFavorites(favs);
     }
+    setMealTemplates(data.mealTemplates || []);
     setProfile(data.profile || {});
     // First-run onboarding: only when no profile has been set up yet.
     if (!data.profile?.onboardingComplete) {
@@ -480,6 +483,10 @@ export const App: React.FC = () => {
           storage.saveProfile(parsed.profile);
           setProfile(parsed.profile);
         }
+        if (Array.isArray(parsed.mealTemplates)) {
+          storage.saveMealTemplates(parsed.mealTemplates);
+          setMealTemplates(parsed.mealTemplates);
+        }
         return true;
       }
       return false;
@@ -610,6 +617,30 @@ export const App: React.FC = () => {
     storage.saveFavorites(updated);
   };
 
+  // --- Meal presets / templates ---
+  const handleSaveTemplate = (name: string, items: Omit<FoodItem, 'id'>[]) => {
+    const tmpl: MealTemplate = {
+      id: `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      name: name.trim(),
+      items: items.map((it) => ({ ...it })),
+      createdAt: Date.now(),
+    };
+    const updated = [tmpl, ...mealTemplates].slice(0, 30);
+    setMealTemplates(updated);
+    storage.saveMealTemplates(updated);
+    triggerToast(`Saved "${tmpl.name}" as a preset. 🔖`);
+  };
+
+  const handleApplyTemplate = (t: MealTemplate) => {
+    handleConfirmSave(t.items, null);
+  };
+
+  const handleDeleteTemplate = (id: string) => {
+    const updated = mealTemplates.filter((t) => t.id !== id);
+    setMealTemplates(updated);
+    storage.saveMealTemplates(updated);
+  };
+
   // --- Onboarding / TDEE ---
   const handleCompleteOnboarding = (newProfile: UserProfile, derived: UserGoals) => {
     setProfile(newProfile);
@@ -637,6 +668,7 @@ export const App: React.FC = () => {
     setWaterLogs([]);
     setBodyMetrics([]);
     setFavorites([]);
+    setMealTemplates([]);
     setProfile({});
     setGoals({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300, waterTarget: 2500 });
     setGeminiKey('');
@@ -729,7 +761,8 @@ export const App: React.FC = () => {
     waterLogs,
     bodyMetrics,
     favorites,
-    profile
+    profile,
+    mealTemplates
   });
 
   // Derived dashboard values
@@ -820,6 +853,11 @@ export const App: React.FC = () => {
               onQuickLog={handleQuickLog}
               onTogglePin={handleTogglePin}
             />
+            <MealTemplateBar
+              templates={mealTemplates}
+              onApply={handleApplyTemplate}
+              onDelete={handleDeleteTemplate}
+            />
             <Dashboard
               logs={logs}
               workouts={workouts}
@@ -897,6 +935,7 @@ export const App: React.FC = () => {
         personality={coachPersonality}
         calorieGoal={goals.calories || 2000}
         consumedToday={todayConsumedCalories}
+        onSaveTemplate={handleSaveTemplate}
       />
 
       {/* 5. Sleek Toast Notification Banner */}

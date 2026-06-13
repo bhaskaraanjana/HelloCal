@@ -1,4 +1,4 @@
-import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from '../types/nutrition';
 
 const KEYS = {
   LOGS: 'halocal_logs',
@@ -10,7 +10,8 @@ const KEYS = {
   WATER: 'halocal_water',
   BODY: 'halocal_body_metrics',
   FAVORITES: 'halocal_favorites',
-  PROFILE: 'halocal_profile'
+  PROFILE: 'halocal_profile',
+  TEMPLATES: 'halocal_meal_templates'
 };
 
 const DEFAULT_GOALS: UserGoals = {
@@ -116,7 +117,8 @@ export const storage = {
         waterLogs: readJSON<WaterLog[]>(KEYS.WATER, []),
         bodyMetrics: readJSON<BodyMetric[]>(KEYS.BODY, []),
         favorites: readJSON<FavoriteFood[]>(KEYS.FAVORITES, []),
-        profile: readJSON<UserProfile>(KEYS.PROFILE, {})
+        profile: readJSON<UserProfile>(KEYS.PROFILE, {}),
+        mealTemplates: readJSON<MealTemplate[]>(KEYS.TEMPLATES, [])
       };
     } catch (e) {
       console.error('Error reading from localStorage', e);
@@ -130,7 +132,8 @@ export const storage = {
         waterLogs: [],
         bodyMetrics: [],
         favorites: [],
-        profile: {}
+        profile: {},
+        mealTemplates: []
       };
     }
   },
@@ -174,6 +177,10 @@ export const storage = {
 
   saveProfile(profile: UserProfile): void {
     safeSet(KEYS.PROFILE, JSON.stringify(profile));
+  },
+
+  saveMealTemplates(templates: MealTemplate[]): void {
+    safeSet(KEYS.TEMPLATES, JSON.stringify(templates));
   },
 
   clearAll(): void {

@@ -72,6 +72,13 @@ export interface FavoriteFood {
   pinned?: boolean;     // explicitly marked favorite
 }
 
+export interface MealTemplate {
+  id: string;
+  name: string;
+  items: Omit<FoodItem, 'id'>[];
+  createdAt: number;
+}
+
 export type Sex = 'male' | 'female';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'veryActive';
 export type GoalDirection = 'lose' | 'maintain' | 'gain';
@@ -129,6 +136,7 @@ export interface StorageData {
   bodyMetrics: BodyMetric[];
   favorites: FavoriteFood[];
   profile: UserProfile;
+  mealTemplates?: MealTemplate[];
 }
 
 export type CoachPersonality = 'encouraging' | 'strict' | 'analytical' | 'chill';

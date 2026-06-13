@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { FoodItem, WorkoutLog, CoachPersonality } from '../types/nutrition';
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
-import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle, Bookmark } from 'lucide-react';
 
 interface RefinementModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ interface RefinementModalProps {
   personality: CoachPersonality;
   calorieGoal?: number;
   consumedToday?: number;
+  onSaveTemplate?: (name: string, items: Omit<FoodItem, 'id'>[]) => void;
 }
 
 export const RefinementModal: React.FC<RefinementModalProps> = ({
@@ -29,7 +30,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   apiKey,
   personality,
   calorieGoal,
-  consumedToday = 0
+  consumedToday = 0,
+  onSaveTemplate
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
@@ -40,6 +42,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   const [corrStatus, setCorrStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [corrInput, setCorrInput] = useState('');
   const [corrError, setCorrError] = useState<string | null>(null);
+  // Preset naming: null = not naming, string = inline name field is open.
+  const [presetName, setPresetName] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -54,6 +58,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       setCorrStatus('idle');
       setCorrInput('');
       setCorrError(null);
+      setPresetName(null);
     }
   }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching]);
 
@@ -633,6 +638,48 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
               >
                 <Plus size={14} /> Add Another Item
               </button>
+
+              {/* Save the staged items as a one-tap reusable preset. */}
+              {onSaveTemplate && items.length > 0 && (
+                presetName === null ? (
+                  <button
+                    type="button"
+                    onClick={() => setPresetName('')}
+                    className="btn btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', padding: '0.5rem 0', borderRadius: '12px', fontSize: '0.8rem' }}
+                  >
+                    <Bookmark size={14} /> Save as preset
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                    <input
+                      autoFocus
+                      value={presetName}
+                      onChange={(e) => setPresetName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && presetName.trim()) {
+                          onSaveTemplate(presetName.trim(), items);
+                          setPresetName(null);
+                        }
+                      }}
+                      placeholder="Preset name (e.g. My breakfast)"
+                      style={{ flex: 1, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      disabled={!presetName.trim()}
+                      onClick={() => { onSaveTemplate(presetName.trim(), items); setPresetName(null); }}
+                      className="btn btn-primary"
+                      style={{ padding: '0.5rem 0.9rem', fontSize: '0.8rem' }}
+                    >
+                      Save
+                    </button>
+                    <button type="button" onClick={() => setPresetName(null)} className="btn btn-secondary" style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
+                      Cancel
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           )}
 
