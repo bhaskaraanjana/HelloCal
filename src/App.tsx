@@ -41,6 +41,20 @@ const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = 
   { name: 'Greek Yogurt', quantity: '170 g', calories: 100, protein: 17, carbs: 6, fat: 0.7 },
 ];
 
+// Scale every numeric nutrient field of a logged item by a factor, preserving id.
+const SCALE_KEYS: (keyof FoodItem)[] = ['calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium'];
+function scaleFoodItem(item: FoodItem, factor: number): FoodItem {
+  const out: FoodItem = { ...item };
+  for (const k of SCALE_KEYS) {
+    const v = out[k];
+    if (typeof v === 'number') {
+      const scaled = v * factor;
+      (out as unknown as Record<string, number>)[k] = k === 'calories' || k === 'sodium' ? Math.round(scaled) : Math.round(scaled * 10) / 10;
+    }
+  }
+  return out;
+}
+
 export const App: React.FC = () => {
   // 1. Core States loaded from localStorage on mount
   const [logs, setLogs] = useState<MealLog[]>([]);
@@ -399,6 +413,15 @@ export const App: React.FC = () => {
         storage.saveWorkouts(restored);
       },
     } : undefined);
+  };
+
+  // Inline portion adjust from the timeline — scale one logged item in place.
+  const handleScaleItem = (logId: string, itemId: string, factor: number) => {
+    const updated = logs.map((l) =>
+      l.id !== logId ? l : { ...l, items: l.items.map((it) => (it.id === itemId ? scaleFoodItem(it, factor) : it)) }
+    );
+    setLogs(updated);
+    storage.saveLogs(updated);
   };
 
   // Open the refinement modal pre-filled with an existing meal's items, in edit mode.
@@ -943,6 +966,7 @@ export const App: React.FC = () => {
             onEditLog={handleEditLog}
             onCopyDay={handleCopyDay}
             onCopyMeal={handleCopyMeal}
+            onScaleItem={handleScaleItem}
             goals={goals}
           />
         )}

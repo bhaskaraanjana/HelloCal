@@ -28,10 +28,11 @@ interface FoodTimelineProps {
   onEditLog?: (log: MealLog) => void;
   onCopyDay?: (dayStart: number) => void;
   onCopyMeal?: (log: MealLog) => void;
+  onScaleItem?: (logId: string, itemId: string, factor: number) => void;
   goals?: UserGoals;
 }
 
-export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, onCopyMeal, goals }) => {
+export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, onCopyMeal, onScaleItem, goals }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'feed'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -853,6 +854,24 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                             <span>🌿 Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{item.fiber !== undefined ? item.fiber : 0}g</strong></span>
                             <span style={{ opacity: 0.3 }}>•</span>
                             <span>🧂 Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{item.sodium !== undefined ? item.sodium : 0}mg</strong></span>
+                          </div>
+                        )}
+
+                        {/* Inline portion adjust — scale a logged item without reopening the modal. */}
+                        {isExpanded && onScaleItem && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.25rem' }}>
+                            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>Adjust</span>
+                            {([['½×', 0.5], ['1.5×', 1.5], ['2×', 2]] as const).map(([label, factor]) => (
+                              <button
+                                key={label}
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onScaleItem(log.id, item.id, factor); }}
+                                aria-label={`Scale ${item.name} by ${label}`}
+                                style={{ padding: '0.15rem 0.5rem', borderRadius: '7px', background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--accent-purple)', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                {label}
+                              </button>
+                            ))}
                           </div>
                         )}
                       </div>
