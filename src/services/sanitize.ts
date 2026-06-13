@@ -1,4 +1,4 @@
-import type { MealLog, WorkoutLog, FavoriteFood, MealTemplate } from '../types/nutrition';
+import type { MealLog, WorkoutLog, FavoriteFood, MealTemplate, WaterLog, BodyMetric } from '../types/nutrition';
 import { coerceFoodItem } from './validation';
 
 /**
@@ -50,7 +50,7 @@ export function sanitizeMealLogs(raw: unknown): MealLog[] {
     const mt = (log as { mealType?: unknown }).mealType;
     out.push({
       id: strId((log as { id?: unknown }).id, 'meal'),
-      timestamp: nonNeg((log as { timestamp?: unknown }).timestamp, Date.now()) || Date.now(),
+      timestamp: nonNeg((log as { timestamp?: unknown }).timestamp) || Date.now(),
       mealType: (MEAL_TYPES as readonly string[]).includes(mt as string) ? (mt as MealLog['mealType']) : 'snack',
       items: items as MealLog['items'],
     });
@@ -68,7 +68,7 @@ export function sanitizeWorkouts(raw: unknown): WorkoutLog[] {
     if (!activity) continue;
     out.push({
       id: strId((w as { id?: unknown }).id, 'workout'),
-      timestamp: nonNeg((w as { timestamp?: unknown }).timestamp, Date.now()) || Date.now(),
+      timestamp: nonNeg((w as { timestamp?: unknown }).timestamp) || Date.now(),
       activity,
       duration: Math.round(nonNeg((w as { duration?: unknown }).duration)),
       caloriesBurned: Math.round(nonNeg((w as { caloriesBurned?: unknown }).caloriesBurned)),
@@ -107,6 +107,41 @@ export function sanitizeFavorites(raw: unknown): FavoriteFood[] {
   return out;
 }
 
+/** Coerce raw water logs; drops rows with no positive volume. */
+export function sanitizeWaterLogs(raw: unknown): WaterLog[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WaterLog[] = [];
+  for (const w of raw) {
+    if (!w || typeof w !== 'object') continue;
+    const o = w as Record<string, unknown>;
+    const milliliters = Math.round(nonNeg(o.milliliters));
+    if (milliliters <= 0) continue;
+    out.push({ id: strId(o.id, 'water'), timestamp: nonNeg(o.timestamp) || Date.now(), milliliters });
+  }
+  return out;
+}
+
+/** Coerce raw body metrics; drops rows with no positive weight. */
+export function sanitizeBodyMetrics(raw: unknown): BodyMetric[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BodyMetric[] = [];
+  for (const b of raw) {
+    if (!b || typeof b !== 'object') continue;
+    const o = b as Record<string, unknown>;
+    const weight = nonNeg(o.weight);
+    if (weight <= 0) continue;
+    out.push({
+      id: strId(o.id, 'body'),
+      timestamp: nonNeg(o.timestamp) || Date.now(),
+      weight,
+      unit: o.unit === 'lb' ? 'lb' : 'kg',
+      bodyFat: o.bodyFat != null ? nonNeg(o.bodyFat) : undefined,
+      waist: o.waist != null ? nonNeg(o.waist) : undefined,
+    });
+  }
+  return out;
+}
+
 /** Coerce an array of raw meal templates; drops unnamed or itemless templates. */
 export function sanitizeMealTemplates(raw: unknown): MealTemplate[] {
   if (!Array.isArray(raw)) return [];
@@ -121,7 +156,7 @@ export function sanitizeMealTemplates(raw: unknown): MealTemplate[] {
       id: strId(o.id, 'tmpl'),
       name,
       items: items as MealTemplate['items'],
-      createdAt: nonNeg(o.createdAt, Date.now()) || Date.now(),
+      createdAt: nonNeg(o.createdAt) || Date.now(),
     });
   }
   return out;

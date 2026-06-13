@@ -1,5 +1,5 @@
 import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from '../types/nutrition';
-import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates } from './sanitize';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics } from './sanitize';
 
 // Bump when the on-disk shape changes in a way that needs a migration step.
 const SCHEMA_VERSION = 1;
@@ -163,8 +163,8 @@ export const storage = {
         geminiKey: decodeKey(keyRaw),
         coachPersonality: (coachRaw as CoachPersonality) || 'encouraging',
         appSettings: parsedSettings,
-        waterLogs: readJSON<WaterLog[]>(KEYS.WATER, []),
-        bodyMetrics: readJSON<BodyMetric[]>(KEYS.BODY, []),
+        waterLogs: sanitizeWaterLogs(readJSON<unknown>(KEYS.WATER, [])),
+        bodyMetrics: sanitizeBodyMetrics(readJSON<unknown>(KEYS.BODY, [])),
         favorites: sanitizeFavorites(readJSON<unknown>(KEYS.FAVORITES, [])),
         profile: readJSON<UserProfile>(KEYS.PROFILE, {}),
         mealTemplates: sanitizeMealTemplates(readJSON<unknown>(KEYS.TEMPLATES, []))

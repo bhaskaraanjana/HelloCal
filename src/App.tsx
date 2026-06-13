@@ -3,7 +3,7 @@ import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachR
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
 import { clampGoal, GOAL_BOUNDS } from './services/validation';
-import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates } from './services/sanitize';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics } from './services/sanitize';
 import { scaleNutrients, autoMealSlot } from './services/logMath';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
@@ -543,13 +543,15 @@ export const App: React.FC = () => {
           storage.saveAppSettings(parsed.appSettings);
           setAppSettings(parsed.appSettings);
         }
-        if (Array.isArray(parsed.waterLogs)) {
-          storage.saveWater(parsed.waterLogs);
-          setWaterLogs(parsed.waterLogs);
+        if (parsed.waterLogs != null) {
+          const validatedWater = sanitizeWaterLogs(parsed.waterLogs);
+          storage.saveWater(validatedWater);
+          setWaterLogs(validatedWater);
         }
-        if (Array.isArray(parsed.bodyMetrics)) {
-          storage.saveBodyMetrics(parsed.bodyMetrics);
-          setBodyMetrics(parsed.bodyMetrics);
+        if (parsed.bodyMetrics != null) {
+          const validatedMetrics = sanitizeBodyMetrics(parsed.bodyMetrics);
+          storage.saveBodyMetrics(validatedMetrics);
+          setBodyMetrics(validatedMetrics);
         }
         if (parsed.favorites != null) {
           const validatedFavs = sanitizeFavorites(parsed.favorites);

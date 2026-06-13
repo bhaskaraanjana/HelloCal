@@ -4,6 +4,8 @@ import {
   sanitizeWorkouts,
   sanitizeFavorites,
   sanitizeMealTemplates,
+  sanitizeWaterLogs,
+  sanitizeBodyMetrics,
 } from './sanitize';
 
 describe('sanitizeMealLogs', () => {
@@ -92,6 +94,45 @@ describe('sanitizeFavorites', () => {
     ]);
     expect(out[0].pinned).toBe(true);
     expect(out[1].pinned).toBeUndefined();
+  });
+});
+
+describe('sanitizeWaterLogs', () => {
+  it('drops rows with no positive volume and coerces the rest', () => {
+    const out = sanitizeWaterLogs([
+      { id: 'w1', timestamp: 100, milliliters: 250 },
+      { milliliters: 0 },
+      { milliliters: -5 },
+      { milliliters: 'x' },
+      null,
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].milliliters).toBe(250);
+    expect(out[0].timestamp).toBe(100);
+  });
+  it('preserves an epoch-0-adjacent valid timestamp without forcing now (uses || only for 0)', () => {
+    const out = sanitizeWaterLogs([{ milliliters: 200, timestamp: 1700000000000 }]);
+    expect(out[0].timestamp).toBe(1700000000000);
+  });
+});
+
+describe('sanitizeBodyMetrics', () => {
+  it('drops weightless rows, defaults unit, coerces optionals', () => {
+    const out = sanitizeBodyMetrics([
+      { id: 'b1', timestamp: 50, weight: 80, unit: 'lb', bodyFat: 18 },
+      { weight: 0 },
+      { weight: -10 },
+      { weight: 70 }, // no unit -> defaults kg
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].weight).toBe(80);
+    expect(out[0].unit).toBe('lb');
+    expect(out[0].bodyFat).toBe(18);
+    expect(out[1].unit).toBe('kg');
+    expect(out[1].waist).toBeUndefined();
+  });
+  it('returns [] for non-arrays', () => {
+    expect(sanitizeBodyMetrics(null)).toEqual([]);
   });
 });
 
