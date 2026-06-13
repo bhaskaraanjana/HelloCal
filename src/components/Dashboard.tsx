@@ -95,7 +95,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      
+
+      {/* First-log nudge: when nothing is logged today, point to the input above. */}
+      {todayLogs.length === 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          padding: '0.7rem 1rem',
+          borderRadius: '14px',
+          background: 'rgba(139, 92, 246, 0.06)',
+          border: '1px solid var(--border-glass)',
+          color: 'var(--text-secondary)',
+          fontSize: '0.85rem',
+          fontFamily: 'var(--font-display)'
+        }}>
+          <Sparkles size={16} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
+          <span>Quick start: tap the mic, type a food, scan a barcode, or use Quick Add above to log your first meal.</span>
+        </div>
+      )}
+
       {/* Upper Grid - Calorie Ring + Macro bars */}
       <div style={{
         display: 'grid',

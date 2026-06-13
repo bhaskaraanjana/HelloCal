@@ -535,6 +535,7 @@ export const App: React.FC = () => {
     let updated = [...favorites];
     for (const item of items) {
       const key = item.name.trim().toLowerCase();
+      if (!key) continue; // never record an unnamed/blank food as a favorite
       const idx = updated.findIndex((f) => f.name.trim().toLowerCase() === key);
       const macros = {
         quantity: item.quantity,
