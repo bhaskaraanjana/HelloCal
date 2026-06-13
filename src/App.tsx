@@ -13,7 +13,7 @@ const Analytics = React.lazy(() =>
 );
 import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
-import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle } from 'lucide-react';
+import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, History } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
 import { WaterTracker } from './components/WaterTracker';
@@ -28,6 +28,7 @@ import { Onboarding } from './components/Onboarding';
 import { InstallPrompt } from './components/InstallPrompt';
 import { FoodSearchDrawer } from './components/FoodSearchDrawer';
 import { MealTemplateBar } from './components/MealTemplateBar';
+import { RecentsTab } from './components/RecentsTab';
 
 // Common foods seeded into Quick Add on first run so the fastest repeat-log path
 // isn't empty for brand-new users. Low frequency/lastLogged means real, frequently
@@ -58,6 +59,7 @@ function scaleFoodItem(item: FoodItem, factor: number): FoodItem {
 const NAV_TABS = [
   { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { key: 'timeline', label: 'Timeline', Icon: Utensils },
+  { key: 'recents', label: 'Recents', Icon: History },
   { key: 'analytics', label: 'Analytics', Icon: BarChart2 },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon },
 ] as const;
@@ -93,7 +95,7 @@ export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Tab View
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'recents' | 'analytics' | 'settings'>('dashboard');
 
   // Refinement modal states
   const [refinementOpen, setRefinementOpen] = useState(false);
@@ -173,7 +175,7 @@ export const App: React.FC = () => {
     try {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab === 'analytics' || tab === 'timeline' || tab === 'settings' || tab === 'dashboard') {
+      if (tab === 'analytics' || tab === 'timeline' || tab === 'recents' || tab === 'settings' || tab === 'dashboard') {
         setActiveTab(tab);
       }
     } catch {
@@ -711,6 +713,12 @@ export const App: React.FC = () => {
     storage.saveFavorites(updated);
   };
 
+  const handleDeleteFavorite = (id: string) => {
+    const updated = favorites.filter((f) => f.id !== id);
+    setFavorites(updated);
+    storage.saveFavorites(updated);
+  };
+
   // --- Meal presets / templates ---
   const handleSaveTemplate = (name: string, items: Omit<FoodItem, 'id'>[]) => {
     const tmpl: MealTemplate = {
@@ -1002,7 +1010,18 @@ export const App: React.FC = () => {
             />
           </div>
         )}
-        
+
+        {activeTab === 'recents' && (
+          <div role="tabpanel" id="panel-recents" aria-labelledby="tab-recents">
+            <RecentsTab
+              favorites={favorites}
+              onQuickLog={handleQuickLog}
+              onTogglePin={handleTogglePin}
+              onDelete={handleDeleteFavorite}
+            />
+          </div>
+        )}
+
         {activeTab === 'analytics' && (
           <div role="tabpanel" id="panel-analytics" aria-labelledby="tab-analytics" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <Suspense fallback={
