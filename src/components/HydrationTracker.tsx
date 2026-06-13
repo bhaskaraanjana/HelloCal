@@ -386,6 +386,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
             <button
               onClick={() => onRemoveWater(todayLogs[todayLogs.length - 1].id)}
               title="Remove last log"
+              aria-label="Remove last water log"
               style={{
                 padding: '0.45rem',
                 fontSize: '0.8rem',
@@ -401,6 +402,8 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
               }}
               onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(244,63,94,0.03)'}
+              onFocus={(e) => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
+              onBlur={(e) => e.currentTarget.style.background = 'rgba(244,63,94,0.03)'}
             >
               <Minus size={12} />
             </button>
