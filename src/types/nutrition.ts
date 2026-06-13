@@ -11,6 +11,7 @@ export interface FoodItem {
   addedSugar?: number;  // added sugar in grams
   fiber?: number;       // fiber in grams
   sodium?: number;      // sodium in milligrams
+  iron?: number;        // iron in milligrams
 }
 
 export interface MealLog {
@@ -37,7 +38,9 @@ export interface UserGoals {
   addedSugar?: number; // target limit in grams
   fiber?: number;      // target intake in grams
   sodium?: number;     // target limit in milligrams
-  waterTarget?: number; // target intake in milliliters
+  waterTarget?: number; // target intake in milliliters (legacy water tracker)
+  hydration?: number;   // target water intake in ml (HydrationTracker)
+  iron?: number;        // target iron in mg
 }
 
 export interface WaterLog {
@@ -107,6 +110,9 @@ export interface AppSettings {
     fiber: boolean;
     sodium: boolean;
   };
+  // Legacy fixed micros (addedSugar/fiber/sodium). customMicros[] (below) is the
+  // newer, more expressive model adopted from upstream; both coexist during merge.
+  customMicros?: CustomMicro[];
   visibleWidgets: {
     calorieHalo: boolean;
     macros: boolean;
@@ -116,8 +122,22 @@ export interface AppSettings {
     goalCompletion: boolean;
     water?: boolean;
     streak?: boolean;
+    hydration?: boolean;
+    supplements?: boolean;
   };
   reminders?: MealReminders;
+}
+
+export interface CustomMicro {
+  id: string;
+  name: string;
+  emoji: string;
+  unit: string;
+  dailyLimit: number;
+  isLimit: boolean;
+  color: string;
+  glowColor: string;
+  fieldKey: string;
 }
 
 export interface MealReminders {
@@ -130,7 +150,60 @@ export interface MealReminders {
 export interface CommandResponse {
   updatedGoals?: Partial<UserGoals>;
   updatedSettings?: Partial<AppSettings>;
+  newSupplement?: {
+    name: string;
+    dosage: string;
+    schedule: string;
+  };
   aiResponse: string;
+}
+
+// ----- Upstream feature models (hydration, supplements, presets, recipes) -----
+
+export interface HydrationLog {
+  id: string;
+  timestamp: number;
+  amount: number; // in ml
+}
+
+export interface Supplement {
+  id: string;
+  name: string;
+  dosage: string;
+  schedule: string;
+  takenToday: boolean;
+  lastTakenTimestamp?: number;
+}
+
+export interface MealPreset {
+  id: string;
+  name: string;
+  icon: string; // emoji like 🥤, 🥣
+  items: Omit<FoodItem, 'id'>[];
+  isCustomFood?: boolean;
+}
+
+export interface RecipeIngredient {
+  name: string;
+  quantity: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  sugar?: number;
+  addedSugar?: number;
+  fiber?: number;
+  sodium?: number;
+  iron?: number;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  icon: string; // emoji like 🥣
+  servings: number;
+  yieldUnit: string; // e.g. "cup", "muffin", "slice", "serving"
+  ingredients: RecipeIngredient[];
 }
 
 export interface StorageData {
@@ -145,6 +218,10 @@ export interface StorageData {
   favorites: FavoriteFood[];
   profile: UserProfile;
   mealTemplates?: MealTemplate[];
+  hydrationLogs?: HydrationLog[];
+  supplements?: Supplement[];
+  presets?: MealPreset[];
+  recipes?: Recipe[];
 }
 
 export type CoachPersonality = 'encouraging' | 'strict' | 'analytical' | 'chill';

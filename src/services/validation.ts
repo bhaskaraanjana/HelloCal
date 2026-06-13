@@ -131,6 +131,7 @@ export function coerceFoodItem(raw: any): Omit<FoodItem, 'id'> | null {
     addedSugar,
     fiber: raw.fiber != null ? Math.round(num(raw.fiber) * 10) / 10 : undefined,
     sodium: raw.sodium != null ? Math.round(num(raw.sodium)) : undefined,
+    iron: raw.iron != null ? Math.round(num(raw.iron) * 10) / 10 : undefined,
     confidence,
   };
 }
@@ -201,6 +202,8 @@ export const GOAL_BOUNDS: Record<keyof UserGoals, { min: number; max: number }> 
   fiber: { min: 5, max: 150 },
   sodium: { min: 200, max: 6000 },
   waterTarget: { min: 250, max: 8000 },
+  hydration: { min: 250, max: 8000 },
+  iron: { min: 5, max: 45 },
 };
 
 export function clampGoal(field: keyof UserGoals, value: number, fallback: number): number {

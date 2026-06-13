@@ -1108,7 +1108,7 @@ export const App: React.FC = () => {
                 Loading analytics…
               </div>
             }>
-              <Analytics logs={logs} goals={goals} />
+              <Analytics logs={logs} workouts={workouts} goals={goals} />
               <WeightTracker
                 metrics={bodyMetrics}
                 preferredUnit={profile.preferredWeightUnit || 'kg'}

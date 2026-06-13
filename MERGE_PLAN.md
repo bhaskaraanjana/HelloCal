@@ -9,7 +9,7 @@ Branch: `merge-upstream`.
 
 ## Steps (commit each green)
 1. [x] Branch + green baseline (131 tests).
-2. [ ] Types: add `iron?` (FoodItem/RecipeIngredient), `iron?`/`hydration?` (UserGoals);
+2. [x] Types: add `iron?` (FoodItem/RecipeIngredient), `iron?`/`hydration?` (UserGoals);
    add Recipe, RecipeIngredient, MealPreset, Supplement, CustomMicro, HydrationLog;
    AppSettings.visibleMicros{} -> customMicros[] (keep reminders/water/streak);
    extend StorageData union; CommandResponse.newSupplement?.
@@ -17,7 +17,7 @@ Branch: `merge-upstream`.
    migrate() v3 (visibleMicros->customMicros; water->hydration; seed presets/recipes;
    goals.iron=18, hydration from waterTarget). Round-trip in import/export/clear.
 4. [ ] gemini.ts: add fetchSupplementInfo, fetchMicronutrientInfo, parseRecipeDescription.
-5. [ ] **Analytics fix (headline):** replace ours with upstream's period-aware version;
+5. [x] **Analytics fix (headline):** replace ours with upstream's period-aware version;
    keep lazy+Suspense; pass workouts; ChartJS.register(...registerables); +Analytics.test.
 6. [ ] HydrationTracker (replace WaterTracker UI), HydrationLog{amount}, hydration CSS vars.
 7. [ ] Supplements: state + daily-reset-on-init + widget + AI add (fetchSupplementInfo).
