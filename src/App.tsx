@@ -18,6 +18,19 @@ import { QuickLogBar } from './components/QuickLogBar';
 import { WeightTracker } from './components/WeightTracker';
 import { Onboarding } from './components/Onboarding';
 import { InstallPrompt } from './components/InstallPrompt';
+import { FoodSearchDrawer } from './components/FoodSearchDrawer';
+
+// Common foods seeded into Quick Add on first run so the fastest repeat-log path
+// isn't empty for brand-new users. Low frequency/lastLogged means real, frequently
+// logged foods naturally outrank and replace them over time.
+const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = [
+  { name: 'Banana', quantity: '1 medium', calories: 105, protein: 1.3, carbs: 27, fat: 0.4 },
+  { name: 'Apple', quantity: '1 medium', calories: 95, protein: 0.5, carbs: 25, fat: 0.3 },
+  { name: 'Chicken Breast', quantity: '100 g', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+  { name: 'White Rice', quantity: '1 cup cooked', calories: 206, protein: 4.3, carbs: 45, fat: 0.4 },
+  { name: 'Egg', quantity: '1 large', calories: 78, protein: 6, carbs: 0.6, fat: 5 },
+  { name: 'Greek Yogurt', quantity: '170 g', calories: 100, protein: 17, carbs: 6, fat: 0.7 },
+];
 
 export const App: React.FC = () => {
   // 1. Core States loaded from localStorage on mount
@@ -42,6 +55,7 @@ export const App: React.FC = () => {
     visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: true, mealSlots: true, goalCompletion: true, water: true, streak: true }
   });
   const [customizerOpen, setCustomizerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [customizerScope, setCustomizerScope] = useState<'general' | 'macronutrients' | 'micronutrients' | 'widgets'>('general');
 
   // Loading indicator on first mount
@@ -99,7 +113,20 @@ export const App: React.FC = () => {
     }
     setWaterLogs(data.waterLogs || []);
     setBodyMetrics(data.bodyMetrics || []);
-    setFavorites(data.favorites || []);
+    const favs = data.favorites || [];
+    if (favs.length === 0 && (data.logs?.length || 0) === 0) {
+      // Fresh install: seed Quick Add so one-tap logging works immediately.
+      const seeded: FavoriteFood[] = SEED_FAVORITES.map((f, i) => ({
+        ...f,
+        id: `seed_${i}`,
+        frequency: 0,
+        lastLogged: 0,
+      }));
+      setFavorites(seeded);
+      storage.saveFavorites(seeded);
+    } else {
+      setFavorites(favs);
+    }
     setProfile(data.profile || {});
     // First-run onboarding: only when no profile has been set up yet.
     if (!data.profile?.onboardingComplete) {
@@ -183,6 +210,16 @@ export const App: React.FC = () => {
     }
 
     openRefinement(response);
+  };
+
+  // A food picked from the search drawer: stage it for portion review, then log.
+  const handleSearchPick = (item: Omit<FoodItem, 'id'>) => {
+    setSearchOpen(false);
+    openRefinement({
+      type: 'food',
+      items: [item],
+      coachingMessage: `Loaded "${item.name}" from the food database. Adjust the portion if needed, then log.`,
+    });
   };
 
   const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null): string | undefined => {
@@ -362,6 +399,33 @@ export const App: React.FC = () => {
     storage.saveLogs(updated);
     triggerToast(`Copied ${sourceLogs.length} meal(s) to today. 📋`);
     fireConfetti({ particleCount: 50, spread: 40, origin: { y: 0.8 } });
+  };
+
+  // Duplicate a single past meal onto today (today's auto meal slot, fresh ids).
+  const handleCopyMeal = (log: MealLog) => {
+    const now = Date.now();
+    const hour = new Date().getHours();
+    let mealType: MealLog['mealType'] = 'snack';
+    if (hour >= 4 && hour < 11) mealType = 'breakfast';
+    else if (hour >= 11 && hour < 16) mealType = 'lunch';
+    else if (hour >= 17 && hour < 22) mealType = 'dinner';
+
+    const copy: MealLog = {
+      id: `meal_${now}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: now,
+      mealType,
+      items: log.items.map((it, j) => ({
+        ...it,
+        id: `item_${now}_${j}_${Math.random().toString(36).slice(2, 5)}`,
+      })),
+    };
+    const updated = [copy, ...logs];
+    setLogs(updated);
+    storage.saveLogs(updated);
+    recordFavorites(log.items.map(({ id, ...rest }) => rest));
+    const cals = log.items.reduce((s, i) => s + i.calories, 0);
+    triggerToast(`Copied ${log.items.length} item(s) to today (+${Math.round(cals)} kcal).`);
+    fireConfetti({ particleCount: 40, spread: 35, origin: { y: 0.8 } });
   };
 
   const handleImportJson = (jsonData: string): boolean => {
@@ -716,6 +780,7 @@ export const App: React.FC = () => {
           onParsingSuccess={handleLoggingSuccess}
           onError={(msg) => triggerToast(msg)}
           onOpenSettings={() => setActiveTab('settings')}
+          onOpenSearch={() => setSearchOpen(true)}
         />
       </section>
 
@@ -757,6 +822,7 @@ export const App: React.FC = () => {
             onDeleteWorkout={handleDeleteWorkoutEntry}
             onEditLog={handleEditLog}
             onCopyDay={handleCopyDay}
+            onCopyMeal={handleCopyMeal}
             goals={goals}
           />
         )}
@@ -834,6 +900,13 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 5.2. Open Food Facts search drawer */}
+      <FoodSearchDrawer
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onPick={handleSearchPick}
+      />
 
       {/* 5.3. Custom PWA install prompt */}
       <InstallPrompt />

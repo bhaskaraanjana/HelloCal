@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera, ScanLine } from 'lucide-react';
+import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera, ScanLine, Search } from 'lucide-react';
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
 import { capturePhotoNative, isNative } from '../services/native';
@@ -14,6 +14,7 @@ interface VoiceInputProps {
   onParsingSuccess: (response: CoachResponse) => void;
   onError: (message: string) => void;
   onOpenSettings?: () => void;
+  onOpenSearch?: () => void;
 }
 
 export const VoiceInput: React.FC<VoiceInputProps> = ({
@@ -21,7 +22,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   personality,
   onParsingSuccess,
   onError,
-  onOpenSettings
+  onOpenSettings,
+  onOpenSearch
 }) => {
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [textInput, setTextInput] = useState('');
@@ -474,6 +476,36 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           </div>
         )}
       </div>
+
+      {/* Search the food database — no key needed, surfaces millions of products. */}
+      {onOpenSearch && (
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            width: '100%',
+            padding: '0.7rem 1rem',
+            borderRadius: '14px',
+            background: 'var(--bg-glass)',
+            border: '1px solid var(--border-glass)',
+            color: 'var(--text-secondary)',
+            fontSize: '0.88rem',
+            fontWeight: 600,
+            fontFamily: 'var(--font-display)',
+            cursor: 'pointer',
+            transition: 'var(--transition-smooth)'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent-purple)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-glass)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+        >
+          <Search size={16} color="var(--accent-purple)" />
+          Search the food database
+        </button>
+      )}
 
       {/* No-key disclosure: explain up front that voice/photo/barcode need a key,
           so users aren't surprised by an error only after tapping. Typing is free. */}

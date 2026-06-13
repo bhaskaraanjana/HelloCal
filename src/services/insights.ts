@@ -9,6 +9,21 @@ const startOfDay = (ts: number): number => {
 };
 
 /**
+ * The local-day window [start, end) containing `ts` (defaults to now). Use the
+ * half-open range for all "today" filters so late-night entries from other days
+ * never leak across the boundary (e.g. `t >= start && t < end`).
+ */
+export function dayRange(ts: number = Date.now()): { start: number; end: number } {
+  const start = startOfDay(ts);
+  return { start, end: start + DAY_MS };
+}
+
+/** True when two timestamps fall on the same local calendar day. */
+export function isSameLocalDay(a: number, b: number): boolean {
+  return startOfDay(a) === startOfDay(b);
+}
+
+/**
  * Current logging streak: number of consecutive days (ending today or yesterday)
  * that have at least one meal logged. Today not yet logged does not break the streak
  * until a full day with no logs passes.

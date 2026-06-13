@@ -27,10 +27,11 @@ interface FoodTimelineProps {
   onDeleteWorkout?: (id: string) => void;
   onEditLog?: (log: MealLog) => void;
   onCopyDay?: (dayStart: number) => void;
+  onCopyMeal?: (log: MealLog) => void;
   goals?: UserGoals;
 }
 
-export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, goals }) => {
+export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, onCopyMeal, goals }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'feed'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -719,6 +720,42 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                           }}
                         >
                           <Pencil size={12} />
+                        </button>
+                      )}
+
+                      {onCopyMeal && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCopyMeal(log);
+                          }}
+                          aria-label="Copy this meal to today"
+                          title="Copy to today"
+                          style={{
+                            background: 'rgba(6, 182, 212, 0.05)',
+                            border: '1px solid rgba(6, 182, 212, 0.1)',
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'var(--transition-smooth)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = 'var(--text-primary)';
+                            e.currentTarget.style.backgroundColor = 'var(--accent-teal)';
+                            e.currentTarget.style.borderColor = 'var(--accent-teal)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                            e.currentTarget.style.backgroundColor = 'rgba(6, 182, 212, 0.05)';
+                            e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.1)';
+                          }}
+                        >
+                          <CopyPlus size={12} />
                         </button>
                       )}
 
