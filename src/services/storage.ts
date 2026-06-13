@@ -1,9 +1,20 @@
 import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement, HydrationLog, MealPreset } from '../types/nutrition';
-import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements, sanitizeHydrationLogs, sanitizeMealPresets } from './sanitize';
+import type { CustomMicro } from '../types/nutrition';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements, sanitizeHydrationLogs, sanitizeMealPresets, sanitizeCustomMicros } from './sanitize';
 
 // Bump when the on-disk shape changes in a way that needs a migration step.
 // v2: rebrand HaloCal -> HelloCal migrated localStorage keys halocal_* -> hellocal_*.
-const SCHEMA_VERSION = 2;
+// v3: seed AppSettings.customMicros (custom micronutrient HUD) from legacy visibleMicros.
+const SCHEMA_VERSION = 3;
+
+/** The starter custom-micronutrient set — all data-backed FoodItem fields so they show real intake. */
+function buildDefaultMicros(goals: UserGoals, vis?: { addedSugar?: boolean; fiber?: boolean; sodium?: boolean }): CustomMicro[] {
+  return [
+    { id: 'micro_addedsugar', name: 'Added Sugar', emoji: '🍭', unit: 'g', dailyLimit: goals.addedSugar ?? 30, isLimit: true, color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)', fieldKey: 'addedSugar', hidden: vis?.addedSugar === false || undefined },
+    { id: 'micro_fiber', name: 'Dietary Fiber', emoji: '🌿', unit: 'g', dailyLimit: goals.fiber ?? 30, isLimit: false, color: 'var(--accent-teal)', glowColor: 'var(--accent-teal-glow)', fieldKey: 'fiber', hidden: vis?.fiber === false || undefined },
+    { id: 'micro_sodium', name: 'Sodium', emoji: '🧂', unit: 'mg', dailyLimit: goals.sodium ?? 2300, isLimit: true, color: 'var(--accent-amber)', glowColor: 'var(--accent-amber-glow)', fieldKey: 'sodium', hidden: vis?.sodium === false || undefined },
+  ];
+}
 
 const KEYS = {
   LOGS: 'hellocal_logs',
@@ -109,7 +120,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     breakfast: '08:00',
     lunch: '12:30',
     dinner: '18:30'
-  }
+  },
+  showBurnBreakdown: true,
+  showMealBreakdown: true,
+  goalScoreBasis: 'calories'
 };
 
 export const storage = {
@@ -136,6 +150,20 @@ export const storage = {
           if (legacy !== key && localStorage.getItem(key) === null) {
             const old = localStorage.getItem(legacy);
             if (old !== null) localStorage.setItem(key, old);
+          }
+        }
+      }
+
+      if (stored < 3) {
+        // Seed customMicros from legacy visibleMicros + goals (once).
+        const sRaw = localStorage.getItem(KEYS.SETTINGS);
+        if (sRaw) {
+          const s = JSON.parse(sRaw);
+          if (!Array.isArray(s.customMicros) || s.customMicros.length === 0) {
+            const gRaw = localStorage.getItem(KEYS.GOALS);
+            const g = gRaw ? JSON.parse(gRaw) : DEFAULT_GOALS;
+            s.customMicros = buildDefaultMicros(g, s.visibleMicros);
+            localStorage.setItem(KEYS.SETTINGS, JSON.stringify(s));
           }
         }
       }
@@ -171,6 +199,10 @@ export const storage = {
         visibleWidgets: { ...DEFAULT_SETTINGS.visibleWidgets, ...(parsedSettings.visibleWidgets || {}) },
         reminders: { ...DEFAULT_SETTINGS.reminders, ...(parsedSettings.reminders || {}) }
       };
+      // customMicros is an array — assign wholesale (never spread-merge), seeding
+      // data-backed defaults when absent so the micro HUD shows real intake.
+      const micros = sanitizeCustomMicros(parsedSettings.customMicros);
+      parsedSettings.customMicros = micros.length > 0 ? micros : buildDefaultMicros(parsedGoals, parsedSettings.visibleMicros);
 
       // Defensively sanitize every collection on load so a corrupt/partial/
       // hand-edited store degrades gracefully instead of poisoning the UI.

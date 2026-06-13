@@ -1,4 +1,4 @@
-import type { MealLog, WorkoutLog, FavoriteFood, MealTemplate, WaterLog, BodyMetric, Recipe, RecipeIngredient, Supplement, HydrationLog, MealPreset } from '../types/nutrition';
+import type { MealLog, WorkoutLog, FavoriteFood, MealTemplate, WaterLog, BodyMetric, Recipe, RecipeIngredient, Supplement, HydrationLog, MealPreset, CustomMicro } from '../types/nutrition';
 import { coerceFoodItem } from './validation';
 
 /**
@@ -152,6 +152,32 @@ export function sanitizeHydrationLogs(raw: unknown): HydrationLog[] {
     const amount = Math.round(nonNeg(o.amount));
     if (amount <= 0) continue;
     out.push({ id: strId(o.id, 'hyd'), timestamp: nonNeg(o.timestamp) || Date.now(), amount });
+  }
+  return out;
+}
+
+/** Coerce raw custom micronutrient definitions; drops entries missing name/fieldKey. */
+export function sanitizeCustomMicros(raw: unknown): CustomMicro[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CustomMicro[] = [];
+  for (const m of raw) {
+    if (!m || typeof m !== 'object') continue;
+    const o = m as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name.trim() : '';
+    const fieldKey = typeof o.fieldKey === 'string' ? o.fieldKey.trim() : '';
+    if (!name || !fieldKey) continue;
+    out.push({
+      id: strId(o.id, 'micro'),
+      name,
+      emoji: typeof o.emoji === 'string' && o.emoji ? o.emoji : '🔬',
+      unit: typeof o.unit === 'string' && o.unit ? o.unit : 'g',
+      dailyLimit: nonNeg(o.dailyLimit),
+      isLimit: o.isLimit === true,
+      color: typeof o.color === 'string' && o.color ? o.color : 'var(--accent-purple)',
+      glowColor: typeof o.glowColor === 'string' && o.glowColor ? o.glowColor : 'var(--accent-purple-glow)',
+      fieldKey,
+      hidden: o.hidden === true ? true : undefined,
+    });
   }
   return out;
 }

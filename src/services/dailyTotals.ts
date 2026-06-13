@@ -11,6 +11,8 @@ export interface DailyTotals {
   consumedAddedSugar: number;
   consumedFiber: number;
   consumedSodium: number;
+  consumedIron: number;
+  consumedSugar: number;
   totalBurnedCalories: number;
   totalWorkoutMinutes: number;
   breakfastCount: number;
@@ -46,6 +48,8 @@ export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: 
     consumedAddedSugar: 0,
     consumedFiber: 0,
     consumedSodium: 0,
+    consumedIron: 0,
+    consumedSugar: 0,
     totalBurnedCalories: 0,
     totalWorkoutMinutes: 0,
     breakfastCount: 0,
@@ -67,6 +71,8 @@ export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: 
       t.consumedAddedSugar += n(item.addedSugar);
       t.consumedFiber += n(item.fiber);
       t.consumedSodium += n(item.sodium);
+      t.consumedIron += n(item.iron);
+      t.consumedSugar += n(item.sugar);
     }
   }
 
@@ -76,4 +82,22 @@ export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: 
   }
 
   return t;
+}
+
+/**
+ * Sum an arbitrary numeric FoodItem field across a day's logged items. Used by the
+ * custom-micronutrient HUD — but callers must only pass DATA-BACKED field keys
+ * (fields the AI parser actually populates), never an arbitrary custom key, or the
+ * result would be a misleading 0.
+ */
+export function sumFieldKey(logs: MealLog[], fieldKey: string, ts: number = Date.now()): number {
+  const { start, end } = dayRange(ts);
+  let total = 0;
+  for (const log of logs) {
+    if (log.timestamp < start || log.timestamp >= end) continue;
+    for (const item of log.items) {
+      total += n((item as unknown as Record<string, unknown>)[fieldKey]);
+    }
+  }
+  return total;
 }

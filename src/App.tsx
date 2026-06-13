@@ -1138,6 +1138,8 @@ export const App: React.FC = () => {
               onTriggerCustomize={handleTriggerCustomize}
               onSaveGoals={handleSaveGoals}
               onSaveAppSettings={handleSaveAppSettings}
+              apiKey={geminiKey}
+              onError={(msg) => triggerToast(msg)}
             />
             {appSettings.visibleWidgets.water !== false && (
               <WaterTracker

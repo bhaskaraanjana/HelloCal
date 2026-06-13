@@ -15,6 +15,10 @@ const settings: AppSettings = {
   visibleMacros: { protein: true, carbs: true, fat: true },
   visibleMicros: { addedSugar: true, fiber: true, sodium: true },
   visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: true, mealSlots: true, goalCompletion: true, water: true, streak: true },
+  customMicros: [
+    { id: 'micro_addedsugar', name: 'Added Sugar', emoji: '🍭', unit: 'g', dailyLimit: 30, isLimit: true, color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)', fieldKey: 'addedSugar' },
+    { id: 'micro_fiber', name: 'Dietary Fiber', emoji: '🌿', unit: 'g', dailyLimit: 30, isLimit: false, color: 'var(--accent-teal)', glowColor: 'var(--accent-teal-glow)', fieldKey: 'fiber' },
+  ],
 };
 const todayMeal = (): MealLog => ({
   id: 'm1',
@@ -59,5 +63,30 @@ describe('Dashboard', () => {
     expect(screen.getByRole('dialog', { name: /Daily Halo settings/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(onSaveGoals).toHaveBeenCalled();
+  });
+
+  it('renders custom micros, summing data-backed values from logged food', () => {
+    const meal: MealLog = { id: 'm', timestamp: Date.now(), mealType: 'lunch', items: [{ id: 'i', name: 'Cereal', quantity: '1', calories: 200, protein: 4, carbs: 40, fat: 2, addedSugar: 12, fiber: 5, confidence: 'high' }] };
+    render(<Dashboard logs={[meal]} workouts={[]} goals={goals} appSettings={settings} onTriggerCustomize={() => {}} />);
+    expect(screen.getByText(/Added Sugar/)).toBeTruthy();
+    expect(screen.getByText(/Dietary Fiber/)).toBeTruthy();
+  });
+
+  it('shows "not auto-tracked" for a custom micro with no logged data (honesty)', () => {
+    const s: AppSettings = { ...settings, customMicros: [{ id: 'mk', name: 'Potassium', emoji: '🍌', unit: 'mg', dailyLimit: 3500, isLimit: false, color: 'var(--accent-blue)', glowColor: 'var(--accent-blue-glow)', fieldKey: 'potassium' }] };
+    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={s} onTriggerCustomize={() => {}} />);
+    expect(screen.getByText(/Potassium/)).toBeTruthy();
+    expect(screen.getByText(/Not auto-tracked from foods/i)).toBeTruthy();
+  });
+
+  it('adds a custom micronutrient from the micros settings (offline, no key)', () => {
+    const onSaveAppSettings = vi.fn();
+    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={settings} onTriggerCustomize={() => {}} onSaveAppSettings={onSaveAppSettings} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Micronutrients settings' }));
+    fireEvent.change(screen.getByLabelText('New micronutrient name'), { target: { value: 'Iron' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add micronutrient' }));
+    expect(onSaveAppSettings).toHaveBeenCalled();
+    const lastCall = onSaveAppSettings.mock.calls.at(-1)![0];
+    expect(lastCall.customMicros.some((m: { fieldKey: string }) => m.fieldKey === 'iron')).toBe(true);
   });
 });

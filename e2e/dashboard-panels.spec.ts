@@ -40,6 +40,18 @@ test('per-panel settings drawer opens and exposes config', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Hide this panel/i })).toBeVisible();
 });
 
+test('micros panel is ultra-customisable: add a custom micronutrient', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Micronutrients settings' }).click();
+  await expect(page.getByRole('dialog', { name: /Micronutrients settings/i })).toBeVisible();
+  await page.getByLabel('New micronutrient name').fill('Iron');
+  await page.getByRole('button', { name: 'Add micronutrient' }).click();
+  // Persisted into appSettings.customMicros with a data-backed fieldKey.
+  await expect.poll(async () => {
+    return await page.evaluate(() => localStorage.getItem('hellocal_app_settings') || '');
+  }).toContain('"fieldKey":"iron"');
+});
+
 test('drag handle reorders panels (pointer events — works on touch too)', async ({ page }) => {
   await page.goto('/');
   const handle = page.getByRole('button', { name: 'Drag Daily Halo panel' });

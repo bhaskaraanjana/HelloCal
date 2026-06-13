@@ -89,7 +89,7 @@ describe('migration backfill', () => {
 
   it('migrate() stamps the schema version', () => {
     storage.migrate();
-    expect(localStorage.getItem('hellocal_schema_version')).toBe('2');
+    expect(localStorage.getItem('hellocal_schema_version')).toBe('3');
   });
 
   it('migrate() carries legacy halocal_* data forward to hellocal_* (rebrand)', () => {

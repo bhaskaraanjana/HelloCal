@@ -1,10 +1,29 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import type { MealLog, WorkoutLog, UserGoals, AppSettings } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, AppSettings, CustomMicro } from '../types/nutrition';
 import RingProgress from './ui/RingProgress';
 import ProgressBar from './ui/ProgressBar';
-import { computeDailyTotals } from '../services/dailyTotals';
+import { computeDailyTotals, sumFieldKey } from '../services/dailyTotals';
+import { gemini } from '../services/gemini';
 import { useDraggablePanels } from '../hooks/useDraggablePanels';
-import { Flame, Trophy, Calendar, Sparkles, GripVertical, SlidersHorizontal, ChevronUp, ChevronDown, X, EyeOff } from 'lucide-react';
+import { Flame, Trophy, Calendar, Sparkles, GripVertical, SlidersHorizontal, ChevronUp, ChevronDown, X, EyeOff, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+
+// FoodItem numeric fields the AI parser actually populates — the ONLY keys for
+// which we show a consumed value. A custom micro on any other key is "not tracked"
+// (we never fabricate a 0/limit bar for un-parsed nutrients).
+const DATA_BACKED_FIELDS = new Set(['addedSugar', 'fiber', 'sodium', 'iron', 'sugar', 'protein', 'carbs', 'fat', 'calories']);
+const COLOR_PRESETS: { color: string; glowColor: string }[] = [
+  { color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)' },
+  { color: 'var(--accent-teal)', glowColor: 'var(--accent-teal-glow)' },
+  { color: 'var(--accent-amber)', glowColor: 'var(--accent-amber-glow)' },
+  { color: 'var(--accent-rose)', glowColor: 'var(--accent-rose-glow)' },
+  { color: 'var(--accent-blue)', glowColor: 'var(--accent-blue-glow)' },
+];
+const MACRO_PRESETS: { label: string; p: number; c: number; f: number }[] = [
+  { label: 'Balanced', p: 0.3, c: 0.4, f: 0.3 },
+  { label: 'High-Protein', p: 0.4, c: 0.35, f: 0.25 },
+  { label: 'Keto', p: 0.25, c: 0.05, f: 0.7 },
+  { label: 'Low-Carb', p: 0.35, c: 0.2, f: 0.45 },
+];
 
 type PanelKey = 'calorieHalo' | 'macros' | 'micros' | 'mealSlots' | 'goalCompletion' | 'workouts';
 const DEFAULT_ORDER: PanelKey[] = ['calorieHalo', 'macros', 'micros', 'mealSlots', 'goalCompletion', 'workouts'];
@@ -19,6 +38,8 @@ interface DashboardProps {
   onTriggerCustomize: (scope: 'general' | 'macronutrients' | 'micronutrients' | 'widgets') => void;
   onSaveGoals?: (goals: UserGoals) => void;
   onSaveAppSettings?: (settings: AppSettings) => void;
+  apiKey?: string;
+  onError?: (msg: string) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -29,11 +50,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onTriggerCustomize,
   onSaveGoals,
   onSaveAppSettings,
+  apiKey,
+  onError,
 }) => {
   const {
     todayLogs, todayWorkouts,
     consumedCalories, consumedProtein, consumedCarbs, consumedFat,
-    consumedAddedSugar, consumedFiber, consumedSodium,
     totalBurnedCalories, totalWorkoutMinutes,
     breakfastCount, lunchCount, dinnerCount, snackCount,
   } = useMemo(() => computeDailyTotals(logs, workouts), [logs, workouts]);
@@ -86,6 +108,44 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setSettingsKey(null);
   };
 
+  // --- Custom micronutrient management ---
+  const customMicros = appSettings.customMicros ?? [];
+  const [newMicroName, setNewMicroName] = useState('');
+  const [fetchingMicro, setFetchingMicro] = useState(false);
+  const saveMicros = (micros: CustomMicro[]) => patchSettings({ customMicros: micros });
+  const updateMicro = (id: string, patch: Partial<CustomMicro>) => saveMicros(customMicros.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const removeMicro = (id: string) => saveMicros(customMicros.filter((m) => m.id !== id));
+  const moveMicro = (id: string, dir: -1 | 1) => {
+    const i = customMicros.findIndex((m) => m.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= customMicros.length) return;
+    const next = [...customMicros];
+    [next[i], next[j]] = [next[j], next[i]];
+    saveMicros(next);
+  };
+  const addMicro = async () => {
+    const name = newMicroName.trim();
+    if (!name) return;
+    setFetchingMicro(true);
+    try {
+      let info = { name, emoji: '🔬', unit: 'g', dailyLimit: 0, isLimit: false, color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)' };
+      if (apiKey) {
+        try { info = { ...info, ...(await gemini.fetchMicronutrientInfo(name, apiKey)) }; }
+        catch { onError?.('Could not fetch nutrient info — added with defaults.'); }
+      }
+      const fieldKey = info.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      saveMicros([...customMicros, {
+        id: `micro_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: info.name, emoji: info.emoji || '🔬', unit: info.unit || 'g',
+        dailyLimit: Math.max(0, Number(info.dailyLimit) || 0), isLimit: !!info.isLimit,
+        color: info.color || 'var(--accent-purple)', glowColor: info.glowColor || 'var(--accent-purple-glow)', fieldKey,
+      }]);
+      setNewMicroName('');
+    } finally {
+      setFetchingMicro(false);
+    }
+  };
+
   const PANEL_META: Record<PanelKey, { title: string; icon: React.ReactNode; customize: 'general' | 'macronutrients' | 'micronutrients' | 'widgets' }> = {
     calorieHalo: { title: 'Daily Halo', icon: <Flame size={16} color="var(--accent-purple)" />, customize: 'general' },
     macros: { title: 'Macronutrients', icon: <Trophy size={16} color="var(--accent-amber)" />, customize: 'macronutrients' },
@@ -125,7 +185,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </RingProgress>
             <div style={{ marginTop: '1.25rem', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
               Logged <strong style={{ color: 'var(--text-primary)' }}>{consumedCalories} kcal</strong> of your <strong style={{ color: 'var(--text-primary)' }}>{expandedCalorieGoal} kcal</strong> halo.
-              {totalBurnedCalories > 0 && (
+              {totalBurnedCalories > 0 && appSettings.showBurnBreakdown !== false && (
                 <div style={{ fontSize: '0.78rem', color: 'var(--accent-teal)', marginTop: '0.25rem' }}>🏃 Base {baseCalorieGoal} + Burn {totalBurnedCalories} kcal</div>
               )}
             </div>
@@ -139,14 +199,43 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {appSettings.visibleMacros.carbs && <ProgressBar label="🌾 Carbohydrates" value={consumedCarbs} max={goals.carbs} color="var(--accent-blue)" glowColor="var(--accent-blue-glow)" />}
           </div>
         );
-      case 'micros':
+      case 'micros': {
+        const shown = customMicros.filter((m) => !m.hidden);
+        if (shown.length === 0) {
+          return <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>No micronutrients yet. Tap ⚙ to add any micro you want to track.</p>;
+        }
         return (
           <div>
-            {appSettings.visibleMicros.addedSugar && <ProgressBar label="🍭 Added Sugar (Limit)" value={consumedAddedSugar} max={goals.addedSugar || 30} color={consumedAddedSugar > (goals.addedSugar || 30) ? 'var(--accent-rose)' : 'var(--accent-purple)'} glowColor={consumedAddedSugar > (goals.addedSugar || 30) ? 'var(--accent-rose-glow)' : 'var(--accent-purple-glow)'} />}
-            {appSettings.visibleMicros.fiber && <ProgressBar label="🌿 Dietary Fiber (Target)" value={consumedFiber} max={goals.fiber || 30} color="var(--accent-teal)" glowColor="var(--accent-teal-glow)" />}
-            {appSettings.visibleMicros.sodium && <ProgressBar label="🧂 Sodium (Limit)" value={consumedSodium} max={goals.sodium || 2300} color={consumedSodium > (goals.sodium || 2300) ? 'var(--accent-rose)' : 'var(--accent-amber)'} glowColor={consumedSodium > (goals.sodium || 2300) ? 'var(--accent-rose-glow)' : 'var(--accent-amber-glow)'} unit="mg" />}
+            {shown.map((m) => {
+              if (DATA_BACKED_FIELDS.has(m.fieldKey)) {
+                const consumed = sumFieldKey(todayLogs, m.fieldKey);
+                const over = m.isLimit && consumed > m.dailyLimit;
+                return (
+                  <ProgressBar
+                    key={m.id}
+                    label={`${m.emoji} ${m.name} ${m.isLimit ? '(Limit)' : '(Target)'}`}
+                    value={consumed}
+                    max={m.dailyLimit || 1}
+                    color={over ? 'var(--accent-rose)' : m.color}
+                    glowColor={over ? 'var(--accent-rose-glow)' : m.glowColor}
+                    unit={m.unit}
+                  />
+                );
+              }
+              // Honest: no logged data for this nutrient — show the target, not a fake 0.
+              return (
+                <div key={m.id} style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>
+                    <span>{m.emoji} {m.name}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{m.isLimit ? 'Limit' : 'Target'} {m.dailyLimit}{m.unit}</span>
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem', opacity: 0.8 }}>Not auto-tracked from foods yet</div>
+                </div>
+              );
+            })}
           </div>
         );
+      }
       case 'mealSlots':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -154,23 +243,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <span style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>{todayLogs.length}</span>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>meals logged today</span>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
-              <span style={{ opacity: breakfastCount > 0 ? 1 : 0.4 }}>🍳 B:{breakfastCount}</span>
-              <span style={{ opacity: lunchCount > 0 ? 1 : 0.4 }}>🍱 L:{lunchCount}</span>
-              <span style={{ opacity: dinnerCount > 0 ? 1 : 0.4 }}>🥗 D:{dinnerCount}</span>
-              <span style={{ opacity: snackCount > 0 ? 1 : 0.4 }}>🍪 S:{snackCount}</span>
-            </div>
+            {appSettings.showMealBreakdown !== false && (
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
+                <span style={{ opacity: breakfastCount > 0 ? 1 : 0.4 }}>🍳 B:{breakfastCount}</span>
+                <span style={{ opacity: lunchCount > 0 ? 1 : 0.4 }}>🍱 L:{lunchCount}</span>
+                <span style={{ opacity: dinnerCount > 0 ? 1 : 0.4 }}>🥗 D:{dinnerCount}</span>
+                <span style={{ opacity: snackCount > 0 ? 1 : 0.4 }}>🍪 S:{snackCount}</span>
+              </div>
+            )}
           </div>
         );
-      case 'goalCompletion':
+      case 'goalCompletion': {
+        const basis = appSettings.goalScoreBasis || 'calories';
+        let pct: number;
+        let label: string;
+        if (basis === 'macros') {
+          const pp = goals.protein ? Math.min(consumedProtein / goals.protein, 1) : 0;
+          const cc = goals.carbs ? Math.min(consumedCarbs / goals.carbs, 1) : 0;
+          const ff = goals.fat ? Math.min(consumedFat / goals.fat, 1) : 0;
+          pct = Math.round(((pp + cc + ff) / 3) * 100);
+          label = 'avg macro completion';
+        } else if (basis === 'deficit') {
+          pct = consumedCalories <= expandedCalorieGoal ? 100 : Math.max(0, Math.round(100 - ((consumedCalories - expandedCalorieGoal) / expandedCalorieGoal) * 100));
+          label = 'staying within budget';
+        } else {
+          pct = Math.min(Math.round((consumedCalories / expandedCalorieGoal) * 100), 100);
+          label = "of today's calorie halo";
+        }
         return (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-            <span style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--accent-teal)', fontFamily: 'var(--font-display)' }}>
-              {Math.min(Math.round((consumedCalories / expandedCalorieGoal) * 100), 100)}%
-            </span>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>of today's calorie halo</span>
+            <span style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--accent-teal)', fontFamily: 'var(--font-display)' }}>{pct}%</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{label}</span>
           </div>
         );
+      }
       case 'workouts':
         return todayWorkouts.length === 0 ? (
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>No workouts logged today. Log one above to expand your calorie halo.</p>
@@ -207,19 +313,46 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </button>
       </div>
     );
+    const inputStyle: React.CSSProperties = { padding: '0.45rem 0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' };
+    const iconBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '7px', background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'pointer' };
+
     if (key === 'calorieHalo') {
+      const setCal = (cal: number) => { const g = { ...draftGoals, calories: cal }; setDraftGoals(g); onSaveGoals?.(g); };
       return (
         <>
           {numInput('Base calorie target', draftGoals.calories, (n) => setDraftGoals({ ...draftGoals, calories: n }), 'kcal')}
           <button type="button" onClick={applyGoals} className="btn btn-primary" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>Apply</button>
+          <div style={{ marginTop: '0.85rem' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Quick goal</span>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+              {([['Lose', 0.85], ['Maintain', 1], ['Gain', 1.15]] as const).map(([lbl, f]) => (
+                <button key={lbl} type="button" onClick={() => setCal(Math.round(((Number(goals.calories) || 2000) * f) / 10) * 10)} className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.4rem 0.7rem' }}>{lbl}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginTop: '0.85rem' }}>
+            {toggle('Show base + burn breakdown', appSettings.showBurnBreakdown !== false, (v) => patchSettings({ showBurnBreakdown: v }))}
+          </div>
           {common}
         </>
       );
     }
     if (key === 'macros') {
+      const applyPreset = (p: number, c: number, f: number) => {
+        const cal = Number(draftGoals.calories) || 2000;
+        const g = { ...draftGoals, protein: Math.round((cal * p) / 4), carbs: Math.round((cal * c) / 4), fat: Math.round((cal * f) / 9) };
+        setDraftGoals(g);
+        onSaveGoals?.(g);
+      };
       return (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.6rem' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Macro split presets (from calorie target)</span>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', margin: '0.35rem 0 0.85rem' }}>
+            {MACRO_PRESETS.map((pr) => (
+              <button key={pr.label} type="button" onClick={() => applyPreset(pr.p, pr.c, pr.f)} className="btn btn-secondary" style={{ fontSize: '0.74rem', padding: '0.35rem 0.6rem' }}>{pr.label}</button>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.6rem' }}>
             {numInput('Protein', draftGoals.protein, (n) => setDraftGoals({ ...draftGoals, protein: n }), 'g')}
             {numInput('Carbs', draftGoals.carbs, (n) => setDraftGoals({ ...draftGoals, carbs: n }), 'g')}
             {numInput('Fat', draftGoals.fat, (n) => setDraftGoals({ ...draftGoals, fat: n }), 'g')}
@@ -237,17 +370,76 @@ export const Dashboard: React.FC<DashboardProps> = ({
     if (key === 'micros') {
       return (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.6rem' }}>
-            {numInput('Added sugar', draftGoals.addedSugar, (n) => setDraftGoals({ ...draftGoals, addedSugar: n }), 'g')}
-            {numInput('Fiber', draftGoals.fiber, (n) => setDraftGoals({ ...draftGoals, fiber: n }), 'g')}
-            {numInput('Sodium', draftGoals.sodium, (n) => setDraftGoals({ ...draftGoals, sodium: n }), 'mg')}
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Track any micronutrient — edit limit, emoji, colour, reorder, hide.</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+            {customMicros.length === 0 && <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>No micros yet — add one below.</p>}
+            {customMicros.map((m, idx) => {
+              const backed = DATA_BACKED_FIELDS.has(m.fieldKey);
+              return (
+                <div key={m.id} style={{ border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '0.6rem 0.7rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input value={m.emoji} maxLength={2} onChange={(e) => updateMicro(m.id, { emoji: e.target.value })} aria-label={`${m.name} emoji`} style={{ ...inputStyle, width: '36px', textAlign: 'center' }} />
+                    <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</span>
+                    <button type="button" onClick={() => moveMicro(m.id, -1)} disabled={idx === 0} aria-label={`Move ${m.name} up`} style={{ ...iconBtn, opacity: idx === 0 ? 0.4 : 1 }}><ArrowUp size={14} /></button>
+                    <button type="button" onClick={() => moveMicro(m.id, 1)} disabled={idx === customMicros.length - 1} aria-label={`Move ${m.name} down`} style={{ ...iconBtn, opacity: idx === customMicros.length - 1 ? 0.4 : 1 }}><ArrowDown size={14} /></button>
+                    <button type="button" onClick={() => removeMicro(m.id)} aria-label={`Remove ${m.name}`} style={iconBtn}><Trash2 size={14} /></button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <input type="number" value={m.dailyLimit} onChange={(e) => updateMicro(m.id, { dailyLimit: Math.max(0, Number(e.target.value) || 0) })} aria-label={`${m.name} daily ${m.isLimit ? 'limit' : 'target'}`} style={{ ...inputStyle, width: '78px' }} />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{m.unit}</span>
+                    {toggle(m.isLimit ? 'Limit' : 'Target', m.isLimit, (v) => updateMicro(m.id, { isLimit: v }))}
+                    {toggle('Shown', !m.hidden, (v) => updateMicro(m.id, { hidden: v ? undefined : true }))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    {COLOR_PRESETS.map((cp) => (
+                      <button key={cp.color} type="button" onClick={() => updateMicro(m.id, { color: cp.color, glowColor: cp.glowColor })} aria-label={`Set ${m.name} colour`} style={{ width: '20px', height: '20px', borderRadius: '50%', background: cp.color, border: m.color === cp.color ? '2px solid #fff' : '1px solid var(--border-glass)', cursor: 'pointer', padding: 0 }} />
+                    ))}
+                    <span style={{ marginLeft: 'auto', fontSize: '0.64rem', color: backed ? 'var(--accent-teal)' : 'var(--text-muted)' }}>{backed ? '✓ tracked from foods' : 'manual only'}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <button type="button" onClick={applyGoals} className="btn btn-primary" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>Apply targets</button>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.85rem' }}>
-            {toggle('Show added sugar', appSettings.visibleMicros.addedSugar, (v) => patchSettings({ visibleMicros: { ...appSettings.visibleMicros, addedSugar: v } }))}
-            {toggle('Show fiber', appSettings.visibleMicros.fiber, (v) => patchSettings({ visibleMicros: { ...appSettings.visibleMicros, fiber: v } }))}
-            {toggle('Show sodium', appSettings.visibleMicros.sodium, (v) => patchSettings({ visibleMicros: { ...appSettings.visibleMicros, sodium: v } }))}
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+            <input value={newMicroName} onChange={(e) => setNewMicroName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addMicro(); } }} placeholder={apiKey ? 'Add micro — AI fills details (e.g. Potassium)' : 'Add micro (e.g. Iron)'} aria-label="New micronutrient name" disabled={fetchingMicro} style={{ ...inputStyle, flex: 1 }} />
+            <button type="button" onClick={() => void addMicro()} disabled={fetchingMicro || !newMicroName.trim()} className="btn btn-primary" aria-label="Add micronutrient" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.82rem', opacity: fetchingMicro || !newMicroName.trim() ? 0.6 : 1 }}>
+              {apiKey ? <Sparkles size={14} /> : <Plus size={14} />}{fetchingMicro ? '…' : 'Add'}
+            </button>
           </div>
+          {common}
+        </>
+      );
+    }
+    if (key === 'mealSlots') {
+      return (
+        <>
+          {toggle('Show meal-slot breakdown (B/L/D/S)', appSettings.showMealBreakdown !== false, (v) => patchSettings({ showMealBreakdown: v }))}
+          {common}
+        </>
+      );
+    }
+    if (key === 'goalCompletion') {
+      const basis = appSettings.goalScoreBasis || 'calories';
+      return (
+        <>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            <span>Score basis</span>
+            <select value={basis} onChange={(e) => patchSettings({ goalScoreBasis: e.target.value as AppSettings['goalScoreBasis'] })} style={inputStyle}>
+              <option value="calories">Calories vs halo</option>
+              <option value="macros">Average macro completion</option>
+              <option value="deficit">Staying within budget</option>
+            </select>
+          </label>
+          {common}
+        </>
+      );
+    }
+    if (key === 'workouts') {
+      return (
+        <>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+            Today's active burn: <strong style={{ color: 'var(--accent-teal)' }}>-{totalBurnedCalories} kcal</strong> across {totalWorkoutMinutes} min.
+          </p>
           {common}
         </>
       );

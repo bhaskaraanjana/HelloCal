@@ -126,6 +126,10 @@ export interface AppSettings {
     supplements?: boolean;
   };
   reminders?: MealReminders;
+  // Per-panel display options (ultra-customisable dashboard panels)
+  showBurnBreakdown?: boolean;   // calorieHalo: show "Base + Burn" subline
+  showMealBreakdown?: boolean;   // mealSlots: show B/L/D/S chips
+  goalScoreBasis?: 'calories' | 'macros' | 'deficit'; // goalCompletion scoring
 }
 
 export interface CustomMicro {
@@ -138,6 +142,7 @@ export interface CustomMicro {
   color: string;
   glowColor: string;
   fieldKey: string;
+  hidden?: boolean; // hidden from the dashboard HUD but kept configured
 }
 
 export interface MealReminders {
