@@ -60,4 +60,14 @@ describe('deriveGoals', () => {
     const tiny: UserProfile = { sex: 'female', weightKg: 40, heightCm: 150, age: 70, activityLevel: 'sedentary', goalDirection: 'lose' };
     expect(deriveGoals(tiny)!.calories).toBeGreaterThanOrEqual(1200);
   });
+
+  it('keeps macro kcal <= the calorie budget for a heavy user hitting the 1200 floor', () => {
+    // High protein target (130kg*1.8=234g=936kcal) + 25% fat would overshoot a deeply
+    // floored budget and drive carbs negative -> clamped to 0 while macros > calories.
+    const heavy: UserProfile = { sex: 'female', weightKg: 130, heightCm: 150, age: 70, activityLevel: 'sedentary', goalDirection: 'lose' };
+    const g = deriveGoals(heavy)!;
+    expect(g.carbs).toBeGreaterThanOrEqual(0);
+    const macroKcal = g.protein * 4 + g.carbs * 4 + g.fat * 9;
+    expect(macroKcal).toBeLessThanOrEqual(g.calories + 10); // within rounding
+  });
 });

@@ -55,8 +55,14 @@ export function deriveGoals(profile: UserProfile): UserGoals | null {
   const calories = Math.max(1200, Math.round((tdee + adjust) / 10) * 10);
 
   const protein = Math.round(profile.weightKg * 1.8);
-  const fat = Math.round((calories * 0.25) / 9);
   const proteinCals = protein * 4;
+  // Fat = 25% of kcal, BUT cap it so protein+fat kcal can't exceed the (possibly
+  // 1200-floored) calorie budget — otherwise carbs clamps to 0 while the macro kcal
+  // overshoots the stated goal (heavy user on a deep deficit hitting the floor).
+  let fat = Math.round((calories * 0.25) / 9);
+  if (proteinCals + fat * 9 > calories) {
+    fat = Math.max(0, Math.round((calories - proteinCals) / 9));
+  }
   const fatCals = fat * 9;
   const carbs = Math.max(0, Math.round((calories - proteinCals - fatCals) / 4));
 

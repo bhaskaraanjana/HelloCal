@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement } from './types/nutrition';
 import { storage } from './services/storage';
-import { computeStreak, totalLoggedDays, isSameLocalDay } from './services/insights';
+import { computeStreak, totalLoggedDays, isSameLocalDay, dayRange } from './services/insights';
 import { clampGoal, GOAL_BOUNDS } from './services/validation';
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements } from './services/sanitize';
 import { SupplementTracker } from './components/SupplementTracker';
@@ -400,19 +400,22 @@ export const App: React.FC = () => {
     // Celebration + a single consolidated toast (emitting separate food/workout and
     // celebration toasts let the later one clobber the former, losing the +kcal info).
     if (savedFood || savedWorkout) {
-      // Sum today's remaining calories to see if close to target budget
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const startOfToday = today.getTime();
+      // Sum today's calories to see if close to target budget. Use the half-open
+      // [start,end) day window (matches dailyTotals/insights) so future-dated or
+      // clock-skewed entries can't leak into "today". The just-saved entry only
+      // counts toward today's celebration when its timestamp actually lands today
+      // (a backfill to a past date shouldn't trigger a "you hit today's goal" toast).
+      const { start: dayStart, end: dayEnd } = dayRange();
+      const savedToday = ts >= dayStart && ts < dayEnd;
 
-      const todayLogs = logs.filter(log => log.timestamp >= startOfToday);
-      let consumed = itemsToLog.reduce((s, i) => s + (Number(i.calories) || 0), 0);
+      const todayLogs = logs.filter(log => log.timestamp >= dayStart && log.timestamp < dayEnd);
+      let consumed = savedToday ? itemsToLog.reduce((s, i) => s + (Number(i.calories) || 0), 0) : 0;
       todayLogs.forEach(log => {
         log.items.forEach(item => { consumed += Number(item.calories) || 0; });
       });
 
-      const todayWorkouts = workouts.filter(w => w.timestamp >= startOfToday);
-      let activeBurn = workoutToLog ? workoutToLog.caloriesBurned : 0;
+      const todayWorkouts = workouts.filter(w => w.timestamp >= dayStart && w.timestamp < dayEnd);
+      let activeBurn = (workoutToLog && savedToday) ? workoutToLog.caloriesBurned : 0;
       todayWorkouts.forEach(w => { activeBurn += w.caloriesBurned; });
 
       const expandedGoal = (goals.calories || 2000) + activeBurn;
@@ -675,12 +678,6 @@ export const App: React.FC = () => {
   };
 
   // --- Water tracking ---
-  const startOfTodayTs = () => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  };
-
   const handleAddWater = (ml: number) => {
     const entry: WaterLog = { id: `water_${Date.now()}`, timestamp: Date.now(), milliliters: ml };
     const updated = [entry, ...waterLogs];
@@ -1037,15 +1034,21 @@ export const App: React.FC = () => {
   });
 
   // Derived dashboard values
-  const startOfToday = startOfTodayTs();
   const streak = computeStreak(logs);
   const lifetimeDays = totalLoggedDays(logs);
 
-  // Today's already-logged calories (excluding any meal currently being edited,
-  // since the staged items will replace it) — powers the live budget in the modal.
+  // Today's already-logged calories/burn over the half-open [start,end) day window
+  // (matches dailyTotals/insights so future-dated entries can't leak in). Consumed
+  // excludes any meal currently being edited, since the staged items replace it.
+  const { start: todayStart, end: todayEnd } = dayRange();
   const todayConsumedCalories = logs
-    .filter((l) => l.timestamp >= startOfToday && l.id !== editingLogId)
+    .filter((l) => l.timestamp >= todayStart && l.timestamp < todayEnd && l.id !== editingLogId)
     .reduce((s, l) => s + l.items.reduce((a, i) => a + (Number(i.calories) || 0), 0), 0);
+  // Today's workout burn expands the eatable budget, exactly as the dashboard halo
+  // does — so the modal's "kcal left" matches the dashboard for the same state.
+  const todayBurnedCalories = workouts
+    .filter((w) => w.timestamp >= todayStart && w.timestamp < todayEnd)
+    .reduce((s, w) => s + (Number(w.caloriesBurned) || 0), 0);
 
   return (
     <div className="app-container">
@@ -1256,7 +1259,7 @@ export const App: React.FC = () => {
         coachingMessage={stagedCoaching}
         apiKey={geminiKey}
         personality={coachPersonality}
-        calorieGoal={goals.calories || 2000}
+        calorieGoal={(goals.calories || 2000) + todayBurnedCalories}
         consumedToday={todayConsumedCalories}
         onSaveTemplate={handleSaveTemplate}
         weightKg={profile.weightKg}

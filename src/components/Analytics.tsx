@@ -120,9 +120,13 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, workouts = [], goals
   });
   const consistencyIndex = Math.round((consistentDays / period) * 100);
 
-  // Selected period calculations for macro ratios and micronutrient details
+  // Selected period calculations for macro ratios and micronutrient details.
+  // Bound BOTH ends with the same half-open window the daily bars use, else a
+  // future-dated/clock-skewed log inflates the period totals while the divisor
+  // (`period`) stays fixed, skewing per-day averages and the macro pie.
   const startOfPeriod = pastDays[0].getTime();
-  const periodLogs = logs.filter(log => log.timestamp >= startOfPeriod);
+  const endOfPeriod = pastDays[pastDays.length - 1].getTime() + 24 * 60 * 60 * 1000;
+  const periodLogs = logs.filter(log => log.timestamp >= startOfPeriod && log.timestamp < endOfPeriod);
 
   let totalProtein = 0;
   let totalCarbs = 0;
