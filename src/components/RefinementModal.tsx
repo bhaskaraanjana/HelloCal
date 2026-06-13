@@ -11,7 +11,7 @@ interface RefinementModalProps {
   parsedItems: Omit<FoodItem, 'id'>[];
   parsedWorkout: Omit<WorkoutLog, 'id'> | null;
   logType: 'food' | 'workout' | 'mixed';
-  onSave: (items: Omit<FoodItem, 'id'>[], workout: Omit<WorkoutLog, 'id'> | null) => void;
+  onSave: (items: Omit<FoodItem, 'id'>[], workout: Omit<WorkoutLog, 'id'> | null, mealType?: MealSlot) => void;
   coachingMessage?: string;
   apiKey: string;
   personality: CoachPersonality;
@@ -19,7 +19,16 @@ interface RefinementModalProps {
   consumedToday?: number;
   onSaveTemplate?: (name: string, items: Omit<FoodItem, 'id'>[]) => void;
   weightKg?: number;
+  initialMealType?: MealSlot;
 }
+
+type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+const MEAL_SLOTS: { key: MealSlot; label: string }[] = [
+  { key: 'breakfast', label: '🍳 Breakfast' },
+  { key: 'lunch', label: '🥗 Lunch' },
+  { key: 'dinner', label: '🍱 Dinner' },
+  { key: 'snack', label: '🍎 Snack' },
+];
 
 export const RefinementModal: React.FC<RefinementModalProps> = ({
   isOpen,
@@ -34,7 +43,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   calorieGoal,
   consumedToday = 0,
   onSaveTemplate,
-  weightKg
+  weightKg,
+  initialMealType
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
@@ -47,6 +57,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   const [corrError, setCorrError] = useState<string | null>(null);
   // Preset naming: null = not naming, string = inline name field is open.
   const [presetName, setPresetName] = useState<string | null>(null);
+  // Chosen meal slot; undefined = auto-detect by time of day at save.
+  const [mealSlot, setMealSlot] = useState<MealSlot | undefined>(undefined);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -64,8 +76,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       setCorrInput('');
       setCorrError(null);
       setPresetName(null);
+      setMealSlot(initialMealType);
     }
-  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching]);
+  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching, initialMealType]);
 
   // Escape-to-close + background scroll lock while the modal is open.
   useEffect(() => {
@@ -138,7 +151,11 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   };
 
   const handleConfirmSave = () => {
-    onSave(items, (modalLogType === 'workout' || modalLogType === 'mixed') ? workout : null);
+    onSave(
+      items,
+      (modalLogType === 'workout' || modalLogType === 'mixed') ? workout : null,
+      modalLogType === 'workout' ? undefined : mealSlot
+    );
     onClose();
   };
 
@@ -437,6 +454,35 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.2rem', color: 'var(--accent-purple)', fontFamily: 'var(--font-display)' }}>
                 🥗 Food & Portions Staged
               </h3>
+
+              {/* Meal slot picker — "Auto" assigns by time of day; otherwise an explicit slot. */}
+              <div role="group" aria-label="Meal slot" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.25rem' }}>
+                {([{ key: undefined, label: 'Auto' }, ...MEAL_SLOTS] as { key: MealSlot | undefined; label: string }[]).map(({ key, label }) => {
+                  const selected = mealSlot === key;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setMealSlot(key)}
+                      style={{
+                        padding: '0.3rem 0.7rem',
+                        borderRadius: '99px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-display)',
+                        cursor: 'pointer',
+                        background: selected ? 'var(--accent-purple)' : 'rgba(139,92,246,0.08)',
+                        border: `1px solid ${selected ? 'var(--accent-purple)' : 'var(--border-glass)'}`,
+                        color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        transition: 'var(--transition-smooth)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
 
               {items.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>

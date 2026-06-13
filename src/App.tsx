@@ -102,6 +102,7 @@ export const App: React.FC = () => {
   const [stagedLogType, setStagedLogType] = useState<'food' | 'workout' | 'mixed'>('food');
   const [stagedCoaching, setStagedCoaching] = useState('');
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [stagedMealType, setStagedMealType] = useState<MealLog['mealType'] | undefined>(undefined);
 
   // Floating notifications/toast state. Supports an optional inline action
   // (e.g. "Edit" after an instant-log) so the toast can offer a quick follow-up.
@@ -211,6 +212,7 @@ export const App: React.FC = () => {
     setStagedWorkout(response.workout || null);
     setStagedLogType(response.type || 'food');
     setStagedCoaching(response.coachingMessage || '');
+    setStagedMealType(undefined);
     setRefinementOpen(true);
   };
 
@@ -254,7 +256,7 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null): string | undefined => {
+  const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null, mealTypeOverride?: MealLog['mealType']): string | undefined => {
     const hadNoLogsBefore = logs.length === 0;
     // Edit-in-place: replace the items of an existing meal log instead of inserting a new one.
     if (editingLogId) {
@@ -270,7 +272,7 @@ export const App: React.FC = () => {
         triggerToast('Meal removed.');
       } else {
         const updated = logs.map((l) =>
-          l.id === editingLogId ? { ...l, items: reindexed } : l
+          l.id === editingLogId ? { ...l, items: reindexed, mealType: mealTypeOverride ?? l.mealType } : l
         );
         setLogs(updated);
         storage.saveLogs(updated);
@@ -290,16 +292,17 @@ export const App: React.FC = () => {
 
     // 1. Handle Food Items
     if (itemsToLog.length > 0) {
-      // Detect meal slot type automatically based on local time
+      // Use an explicit meal slot if the user picked one, else auto-detect by time.
       const hour = new Date().getHours();
-      let mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack';
+      let autoSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack';
       if (hour >= 4 && hour < 11) {
-        mealType = 'breakfast';
+        autoSlot = 'breakfast';
       } else if (hour >= 11 && hour < 16) {
-        mealType = 'lunch';
+        autoSlot = 'lunch';
       } else if (hour >= 17 && hour < 22) {
-        mealType = 'dinner';
+        autoSlot = 'dinner';
       }
+      const mealType = mealTypeOverride ?? autoSlot;
 
       // Add unique IDs to food items
       const loggedItems: FoodItem[] = itemsToLog.map(item => ({
@@ -438,6 +441,7 @@ export const App: React.FC = () => {
     setStagedLogType('food');
     setStagedCoaching('Editing a logged meal — adjust items, quantities, or remove them, then save.');
     setEditingLogId(log.id);
+    setStagedMealType(log.mealType);
     setRefinementOpen(true);
   };
 
@@ -1037,7 +1041,7 @@ export const App: React.FC = () => {
       {/* 4. Interactive Staged Review Modal */}
       <RefinementModal
         isOpen={refinementOpen}
-        onClose={() => { setRefinementOpen(false); setEditingLogId(null); }}
+        onClose={() => { setRefinementOpen(false); setEditingLogId(null); setStagedMealType(undefined); }}
         parsedItems={stagedItems}
         parsedWorkout={stagedWorkout}
         logType={stagedLogType}
@@ -1049,6 +1053,7 @@ export const App: React.FC = () => {
         consumedToday={todayConsumedCalories}
         onSaveTemplate={handleSaveTemplate}
         weightKg={profile.weightKg}
+        initialMealType={stagedMealType}
       />
 
       {/* 5. Sleek Toast Notification Banner */}
