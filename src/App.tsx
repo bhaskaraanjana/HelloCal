@@ -315,8 +315,10 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null, mealTypeOverride?: MealLog['mealType']): string | undefined => {
+  const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null, mealTypeOverride?: MealLog['mealType'], timestampOverride?: number): string | undefined => {
     const hadNoLogsBefore = logs.length === 0;
+    // Backfill support: a past timestamp logs to that day/time (else now).
+    const ts = timestampOverride && Number.isFinite(timestampOverride) ? timestampOverride : Date.now();
     // Edit-in-place: replace the items of an existing meal log instead of inserting a new one.
     if (editingLogId) {
       const reindexed: FoodItem[] = itemsToLog.map((item, i) => ({
@@ -351,8 +353,9 @@ export const App: React.FC = () => {
 
     // 1. Handle Food Items
     if (itemsToLog.length > 0) {
-      // Use an explicit meal slot if the user picked one, else auto-detect by time.
-      const mealType = mealTypeOverride ?? autoMealSlot();
+      // Use an explicit meal slot if the user picked one, else auto-detect from the
+      // (possibly backfilled) log time.
+      const mealType = mealTypeOverride ?? autoMealSlot(new Date(ts));
 
       // Add unique IDs to food items
       const loggedItems: FoodItem[] = itemsToLog.map(item => ({
@@ -363,7 +366,7 @@ export const App: React.FC = () => {
       createdMealId = `meal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const newLogEntry: MealLog = {
         id: createdMealId,
-        timestamp: Date.now(),
+        timestamp: ts,
         mealType,
         items: loggedItems
       };
@@ -383,7 +386,7 @@ export const App: React.FC = () => {
       const newWorkoutEntry: WorkoutLog = {
         ...workoutToLog,
         id: `workout_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: Date.now()
+        timestamp: ts
       };
 
       const updatedWorkouts = [newWorkoutEntry, ...workouts];
