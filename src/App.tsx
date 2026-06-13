@@ -259,6 +259,9 @@ export const App: React.FC = () => {
     let savedFood = false;
     let savedWorkout = false;
     let createdMealId: string | undefined;
+    let mealCals = 0;
+    let foodCount = 0;
+    let workoutBurn = 0;
 
     // 1. Handle Food Items
     if (itemsToLog.length > 0) {
@@ -292,8 +295,8 @@ export const App: React.FC = () => {
       storage.saveLogs(updatedLogs);
       recordFavorites(itemsToLog);
 
-      const mealCals = loggedItems.reduce((sum, item) => sum + item.calories, 0);
-      triggerToast(`Logged ${loggedItems.length} food item(s) successfully! (+${mealCals} kcal)`);
+      mealCals = loggedItems.reduce((sum, item) => sum + item.calories, 0);
+      foodCount = loggedItems.length;
       savedFood = true;
     }
 
@@ -309,17 +312,18 @@ export const App: React.FC = () => {
       setWorkouts(updatedWorkouts);
       storage.saveWorkouts(updatedWorkouts);
 
-      triggerToast(`Workout logged successfully! (-${workoutToLog.caloriesBurned} kcal)`);
+      workoutBurn = workoutToLog.caloriesBurned;
       savedWorkout = true;
     }
 
-    // Celebration triggers
+    // Celebration + a single consolidated toast (emitting separate food/workout and
+    // celebration toasts let the later one clobber the former, losing the +kcal info).
     if (savedFood || savedWorkout) {
       // Sum today's remaining calories to see if close to target budget
       const today = new Date();
       today.setHours(0,0,0,0);
       const startOfToday = today.getTime();
-      
+
       const todayLogs = logs.filter(log => log.timestamp >= startOfToday);
       let consumed = itemsToLog.reduce((s, i) => s + i.calories, 0);
       todayLogs.forEach(log => {
@@ -334,14 +338,20 @@ export const App: React.FC = () => {
 
       // Celebrate landing within a symmetric ±50 kcal band of the (workout-expanded)
       // target — not a lopsided window that rewarded going 100 kcal over.
-      if (consumed >= expandedGoal - 50 && consumed <= expandedGoal + 50) {
+      const onTarget = consumed >= expandedGoal - 50 && consumed <= expandedGoal + 50;
+      if (onTarget) {
         fireConfetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-        triggerToast('🎯 Incredible! You hit your calorie target halo perfectly today!');
         hapticSuccess();
       } else {
         fireConfetti({ particleCount: 60, spread: 40, origin: { y: 0.8 } });
         haptic('light');
       }
+
+      const parts: string[] = [];
+      if (savedFood) parts.push(`Logged ${foodCount} item(s) (+${mealCals} kcal)`);
+      if (savedWorkout) parts.push(`Workout logged (-${workoutBurn} kcal)`);
+      const base = parts.join(' · ');
+      triggerToast(onTarget ? `${base} · 🎯 You hit your target halo!` : base);
     }
 
     // First successful log after a skipped onboarding: now that the user has

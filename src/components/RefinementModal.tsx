@@ -254,7 +254,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
         else if (/\b(triple|three|3x)\b/.test(newPortion)) multiplier = 3;
         else if (/\b(half|0\.5x)\b/.test(newPortion)) multiplier = 0.5;
         else {
-          const m = newPortion.match(/([0-9]*\.?[0-9]+)\s*x/);
+          // Anchor to a well-formed token so typos like "1..5x" are rejected
+          // rather than yielding a bogus 0.5x from a matched substring.
+          const m = newPortion.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*x(?:$|\s)/);
           if (m) multiplier = parseFloat(m[1]);
         }
 
