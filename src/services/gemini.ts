@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse, UserGoals, AppSettings, CommandResponse } from '../types/nutrition';
+import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse, UserGoals, AppSettings, CommandResponse, Recipe } from '../types/nutrition';
 import {
   extractJSON,
   validateCoachResponse,
@@ -274,5 +274,54 @@ Interpret the user's design command and output the updated layout details.`;
 
     const response = await runModel(apiKey, parts);
     return validateCommandResponse(extractJSON(response));
+  },
+
+  /** Parse a free-text recipe description into a structured Recipe (per-ingredient macros). */
+  async parseRecipeDescription(description: string, apiKey: string): Promise<Omit<Recipe, 'id'>> {
+    if (!apiKey) throw new Error('Gemini API key is required to use AI Recipe Parsing.');
+    const RECIPE_PARSER_PROMPT = `
+You are the HelloCal Recipe Creator Assistant. Analyze a natural-language recipe description (ingredients, weights, volumes, servings) and parse it into a structured Recipe object.
+Estimate calories, protein, carbs, fat, sugar, addedSugar, fiber, sodium for every ingredient if not provided, using standard nutritional databases for cups/tbsp/oz/grams. Be accurate; total macros are the sum of ingredients. Set missing/negligible micros to 0.
+Respond with ONLY a JSON object (no markdown):
+{
+  "name": "Recipe Name",
+  "servings": 12,
+  "yieldUnit": "cookie" | "cup" | "serving" | "slice" | "grams",
+  "ingredients": [
+    { "name": "Rolled Oats", "quantity": "2 cups", "calories": 300, "protein": 10.0, "carbs": 54.0, "fat": 5.0, "sugar": 1.0, "addedSugar": 0.0, "fiber": 8.0, "sodium": 2 }
+  ]
+}`;
+    const text = await runModel(apiKey, [
+      { text: `${RECIPE_PARSER_PROMPT}\n\nAnalyze the following recipe description and parse it into structured JSON:\n"${description}"` },
+    ]);
+    return extractJSON<Omit<Recipe, 'id'>>(text);
+  },
+
+  /** Look up clinical info for a custom micronutrient (for the dashboard micro tracker). */
+  async fetchMicronutrientInfo(name: string, apiKey: string): Promise<{ name: string; emoji: string; unit: string; dailyLimit: number; isLimit: boolean; color: string; glowColor: string }> {
+    if (!apiKey) throw new Error('Gemini API key is required.');
+    const text = await runModel(apiKey, [{
+      text: `You are a clinical nutrition database. For the micronutrient "${name}", return a JSON object with:
+- "name": properly capitalized full name (e.g. "Vitamin D3", "Potassium", "Added Sugar")
+- "emoji": a single relevant emoji
+- "unit": the standard measurement unit ("g", "mg", "mcg", or "IU")
+- "dailyLimit": the FDA/WHO recommended daily value as a number
+- "isLimit": true if this is a nutrient to LIMIT (sodium, sugar, cholesterol), false if a TARGET to REACH (fiber, iron, vitamin D)
+- "color": ONE of "var(--accent-purple)", "var(--accent-teal)", "var(--accent-amber)", "var(--accent-rose)", "var(--accent-blue)"
+- "glowColor": the matching glow ("var(--accent-purple-glow)", etc.)
+Respond ONLY with the JSON object, no markdown.` }]);
+    return extractJSON(text);
+  },
+
+  /** Look up standard dosage/schedule for a supplement by name. */
+  async fetchSupplementInfo(name: string, apiKey: string): Promise<{ name: string; dosage: string; schedule: string }> {
+    if (!apiKey) throw new Error('Gemini API key is required.');
+    const text = await runModel(apiKey, [{
+      text: `You are a clinical supplement advisor. For the supplement "${name}", return a JSON object with:
+- "name": properly capitalized full supplement name (e.g. "Vitamin D3", "Omega-3 Fish Oil", "Magnesium Glycinate")
+- "dosage": the standard recommended daily dosage as a string (e.g. "1 capsule (1000 IU)", "2 softgels (1000mg)")
+- "schedule": the optimal time, exactly one of: "Morning", "Lunch", or "Bedtime"
+Respond ONLY with the JSON object, no markdown.` }]);
+    return extractJSON(text);
   },
 };

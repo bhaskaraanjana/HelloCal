@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from './types/nutrition';
+import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe } from './types/nutrition';
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
 import { clampGoal, GOAL_BOUNDS } from './services/validation';
-import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics } from './services/sanitize';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes } from './services/sanitize';
 import { scaleNutrients, autoMealSlot } from './services/logMath';
 import { isSupabaseConfigured, getCurrentUser, onAuthChange, signIn as cloudSignIn, signUp as cloudSignUp, signOut as cloudSignOut, pushData as cloudPush, pullData as cloudPull, type CloudUser } from './services/cloudSync';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
@@ -16,7 +16,7 @@ const Analytics = React.lazy(() =>
 );
 import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
-import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, History } from 'lucide-react';
+import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, History, BookOpen } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
 import { WaterTracker } from './components/WaterTracker';
@@ -32,6 +32,10 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { FoodSearchDrawer } from './components/FoodSearchDrawer';
 import { MealTemplateBar } from './components/MealTemplateBar';
 import { RecentsTab } from './components/RecentsTab';
+// RecipeBox is large + AI-driven; lazy-load it so it stays out of the initial bundle.
+const RecipeBox = React.lazy(() =>
+  import('./components/RecipeBox').then((m) => ({ default: m.RecipeBox }))
+);
 
 // Common foods seeded into Quick Add on first run so the fastest repeat-log path
 // isn't empty for brand-new users. Low frequency/lastLogged means real, frequently
@@ -49,6 +53,7 @@ const NAV_TABS = [
   { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { key: 'timeline', label: 'Timeline', Icon: Utensils },
   { key: 'recents', label: 'Recents', Icon: History },
+  { key: 'recipes', label: 'Recipes', Icon: BookOpen },
   { key: 'analytics', label: 'Analytics', Icon: BarChart2 },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon },
 ] as const;
@@ -66,6 +71,7 @@ export const App: React.FC = () => {
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetric[]>([]);
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
   const [mealTemplates, setMealTemplates] = useState<MealTemplate[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [profile, setProfile] = useState<UserProfile>({});
   const [onboardingOpen, setOnboardingOpen] = useState(false);
 
@@ -85,7 +91,7 @@ export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Tab View
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'recents' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'recents' | 'recipes' | 'analytics' | 'settings'>('dashboard');
 
   // Refinement modal states
   const [refinementOpen, setRefinementOpen] = useState(false);
@@ -153,6 +159,7 @@ export const App: React.FC = () => {
       setFavorites(favs);
     }
     setMealTemplates(data.mealTemplates || []);
+    setRecipes(data.recipes || []);
     setProfile(data.profile || {});
     // First-run onboarding: only when no profile has been set up yet.
     if (!data.profile?.onboardingComplete) {
@@ -166,7 +173,7 @@ export const App: React.FC = () => {
     try {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab === 'analytics' || tab === 'timeline' || tab === 'recents' || tab === 'settings' || tab === 'dashboard') {
+      if (tab === 'analytics' || tab === 'timeline' || tab === 'recents' || tab === 'recipes' || tab === 'settings' || tab === 'dashboard') {
         setActiveTab(tab);
       }
     } catch {
@@ -577,6 +584,11 @@ export const App: React.FC = () => {
           storage.saveMealTemplates(validatedTemplates);
           setMealTemplates(validatedTemplates);
         }
+        if (parsed.recipes != null) {
+          const validatedRecipes = sanitizeRecipes(parsed.recipes);
+          storage.saveRecipes(validatedRecipes);
+          setRecipes(validatedRecipes);
+        }
         return true;
       }
       return false;
@@ -816,6 +828,34 @@ export const App: React.FC = () => {
     storage.saveMealTemplates(updated);
   };
 
+  // --- Recipes ---
+  const handleSaveRecipes = (newRecipes: Recipe[]) => {
+    setRecipes(newRecipes);
+    storage.saveRecipes(newRecipes);
+  };
+
+  // Log a portion of a recipe: scale each ingredient by `ratio` and route through
+  // the standard save path (toast/confetti/favorites all handled there).
+  const handleLogRecipePortion = (recipe: Recipe, ratio: number, portionName: string) => {
+    const items: Omit<FoodItem, 'id'>[] = recipe.ingredients.map((ing) => ({
+      name: `${ing.name} (from ${recipe.name})`,
+      quantity: ing.quantity,
+      calories: Math.round((Number(ing.calories) || 0) * ratio),
+      protein: Math.round((Number(ing.protein) || 0) * ratio * 10) / 10,
+      carbs: Math.round((Number(ing.carbs) || 0) * ratio * 10) / 10,
+      fat: Math.round((Number(ing.fat) || 0) * ratio * 10) / 10,
+      sugar: ing.sugar != null ? Math.round(ing.sugar * ratio * 10) / 10 : undefined,
+      addedSugar: ing.addedSugar != null ? Math.round(ing.addedSugar * ratio * 10) / 10 : undefined,
+      fiber: ing.fiber != null ? Math.round(ing.fiber * ratio * 10) / 10 : undefined,
+      sodium: ing.sodium != null ? Math.round(ing.sodium * ratio) : undefined,
+      iron: ing.iron != null ? Math.round(ing.iron * ratio * 10) / 10 : undefined,
+      confidence: 'high',
+    }));
+    if (items.length === 0) return;
+    handleConfirmSave(items, null);
+    triggerToast(`Logged ${portionName} of ${recipe.name}. 🍽️`);
+  };
+
   // --- Onboarding / TDEE ---
   const handleCompleteOnboarding = (newProfile: UserProfile, derived: UserGoals) => {
     setProfile(newProfile);
@@ -844,6 +884,7 @@ export const App: React.FC = () => {
     setBodyMetrics([]);
     setFavorites([]);
     setMealTemplates([]);
+    setRecipes([]);
     setProfile({});
     setGoals({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300, waterTarget: 2500 });
     setGeminiKey('');
@@ -961,7 +1002,8 @@ export const App: React.FC = () => {
     bodyMetrics,
     favorites,
     profile,
-    mealTemplates
+    mealTemplates,
+    recipes
   });
 
   // Derived dashboard values
@@ -1098,6 +1140,24 @@ export const App: React.FC = () => {
               onTogglePin={handleTogglePin}
               onDelete={handleDeleteFavorite}
             />
+          </div>
+        )}
+
+        {activeTab === 'recipes' && (
+          <div role="tabpanel" id="panel-recipes" aria-labelledby="tab-recipes">
+            <Suspense fallback={
+              <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
+                Loading recipes…
+              </div>
+            }>
+              <RecipeBox
+                recipes={recipes}
+                onSaveRecipes={handleSaveRecipes}
+                onLogRecipePortion={handleLogRecipePortion}
+                onTriggerToast={triggerToast}
+                apiKey={geminiKey}
+              />
+            </Suspense>
           </div>
         )}
 

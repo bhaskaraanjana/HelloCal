@@ -1,4 +1,4 @@
-import type { MealLog, WorkoutLog, FavoriteFood, MealTemplate, WaterLog, BodyMetric } from '../types/nutrition';
+import type { MealLog, WorkoutLog, FavoriteFood, MealTemplate, WaterLog, BodyMetric, Recipe, RecipeIngredient, Supplement, HydrationLog, MealPreset } from '../types/nutrition';
 import { coerceFoodItem } from './validation';
 
 /**
@@ -137,6 +137,106 @@ export function sanitizeBodyMetrics(raw: unknown): BodyMetric[] {
       unit: o.unit === 'lb' ? 'lb' : 'kg',
       bodyFat: o.bodyFat != null ? nonNeg(o.bodyFat) : undefined,
       waist: o.waist != null ? nonNeg(o.waist) : undefined,
+    });
+  }
+  return out;
+}
+
+/** Coerce raw hydration logs; drops rows with no positive amount. */
+export function sanitizeHydrationLogs(raw: unknown): HydrationLog[] {
+  if (!Array.isArray(raw)) return [];
+  const out: HydrationLog[] = [];
+  for (const h of raw) {
+    if (!h || typeof h !== 'object') continue;
+    const o = h as Record<string, unknown>;
+    const amount = Math.round(nonNeg(o.amount));
+    if (amount <= 0) continue;
+    out.push({ id: strId(o.id, 'hyd'), timestamp: nonNeg(o.timestamp) || Date.now(), amount });
+  }
+  return out;
+}
+
+/** Coerce raw supplements; drops nameless rows. */
+export function sanitizeSupplements(raw: unknown): Supplement[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Supplement[] = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object') continue;
+    const o = s as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name.trim() : '';
+    if (!name) continue;
+    out.push({
+      id: strId(o.id, 'supp'),
+      name,
+      dosage: typeof o.dosage === 'string' ? o.dosage : '',
+      schedule: typeof o.schedule === 'string' ? o.schedule : 'Morning',
+      takenToday: o.takenToday === true,
+      lastTakenTimestamp: o.lastTakenTimestamp != null ? nonNeg(o.lastTakenTimestamp) : undefined,
+    });
+  }
+  return out;
+}
+
+const coerceIngredient = (raw: unknown): RecipeIngredient | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const name = typeof o.name === 'string' ? o.name.trim() : '';
+  if (!name) return null;
+  return {
+    name,
+    quantity: typeof o.quantity === 'string' && o.quantity.trim() ? o.quantity : '1 serving',
+    calories: Math.round(nonNeg(o.calories)),
+    protein: nonNeg(o.protein),
+    carbs: nonNeg(o.carbs),
+    fat: nonNeg(o.fat),
+    sugar: o.sugar != null ? nonNeg(o.sugar) : undefined,
+    addedSugar: o.addedSugar != null ? nonNeg(o.addedSugar) : undefined,
+    fiber: o.fiber != null ? nonNeg(o.fiber) : undefined,
+    sodium: o.sodium != null ? Math.round(nonNeg(o.sodium)) : undefined,
+    iron: o.iron != null ? nonNeg(o.iron) : undefined,
+  };
+};
+
+/** Coerce raw recipes; drops unnamed or ingredient-less recipes. */
+export function sanitizeRecipes(raw: unknown): Recipe[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Recipe[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const o = r as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name.trim() : '';
+    const ingredients = Array.isArray(o.ingredients)
+      ? (o.ingredients.map(coerceIngredient).filter(Boolean) as RecipeIngredient[])
+      : [];
+    if (!name || ingredients.length === 0) continue;
+    out.push({
+      id: strId(o.id, 'recipe'),
+      name,
+      icon: typeof o.icon === 'string' && o.icon ? o.icon : '🍽️',
+      servings: Math.max(1, Math.round(nonNeg(o.servings, 1)) || 1),
+      yieldUnit: typeof o.yieldUnit === 'string' && o.yieldUnit ? o.yieldUnit : 'serving',
+      ingredients,
+    });
+  }
+  return out;
+}
+
+/** Coerce raw meal presets; drops unnamed or itemless presets. */
+export function sanitizeMealPresets(raw: unknown): MealPreset[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MealPreset[] = [];
+  for (const p of raw) {
+    if (!p || typeof p !== 'object') continue;
+    const o = p as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name.trim() : '';
+    const items = Array.isArray(o.items) ? o.items.map((it) => coerceFoodItem(it)).filter(Boolean) : [];
+    if (!name || items.length === 0) continue;
+    out.push({
+      id: strId(o.id, 'preset'),
+      name,
+      icon: typeof o.icon === 'string' && o.icon ? o.icon : '🍽️',
+      items: items as MealPreset['items'],
+      isCustomFood: o.isCustomFood === true ? true : undefined,
     });
   }
   return out;

@@ -1,5 +1,5 @@
-import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from '../types/nutrition';
-import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics } from './sanitize';
+import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement, HydrationLog, MealPreset } from '../types/nutrition';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements, sanitizeHydrationLogs, sanitizeMealPresets } from './sanitize';
 
 // Bump when the on-disk shape changes in a way that needs a migration step.
 // v2: rebrand HaloCal -> HelloCal migrated localStorage keys halocal_* -> hellocal_*.
@@ -17,6 +17,10 @@ const KEYS = {
   FAVORITES: 'hellocal_favorites',
   PROFILE: 'hellocal_profile',
   TEMPLATES: 'hellocal_meal_templates',
+  RECIPES: 'hellocal_recipes',
+  SUPPLEMENTS: 'hellocal_supplements',
+  HYDRATION: 'hellocal_hydration',
+  PRESETS: 'hellocal_presets',
   VERSION: 'hellocal_schema_version'
 };
 
@@ -181,7 +185,11 @@ export const storage = {
         bodyMetrics: sanitizeBodyMetrics(readJSON<unknown>(KEYS.BODY, [])),
         favorites: sanitizeFavorites(readJSON<unknown>(KEYS.FAVORITES, [])),
         profile: readJSON<UserProfile>(KEYS.PROFILE, {}),
-        mealTemplates: sanitizeMealTemplates(readJSON<unknown>(KEYS.TEMPLATES, []))
+        mealTemplates: sanitizeMealTemplates(readJSON<unknown>(KEYS.TEMPLATES, [])),
+        recipes: sanitizeRecipes(readJSON<unknown>(KEYS.RECIPES, [])),
+        supplements: sanitizeSupplements(readJSON<unknown>(KEYS.SUPPLEMENTS, [])),
+        hydrationLogs: sanitizeHydrationLogs(readJSON<unknown>(KEYS.HYDRATION, [])),
+        presets: sanitizeMealPresets(readJSON<unknown>(KEYS.PRESETS, []))
       };
     } catch (e) {
       console.error('Error reading from localStorage', e);
@@ -196,7 +204,11 @@ export const storage = {
         bodyMetrics: [],
         favorites: [],
         profile: {},
-        mealTemplates: []
+        mealTemplates: [],
+        recipes: [],
+        supplements: [],
+        hydrationLogs: [],
+        presets: []
       };
     }
   },
@@ -244,6 +256,22 @@ export const storage = {
 
   saveMealTemplates(templates: MealTemplate[]): void {
     safeSet(KEYS.TEMPLATES, JSON.stringify(templates));
+  },
+
+  saveRecipes(recipes: Recipe[]): void {
+    safeSet(KEYS.RECIPES, JSON.stringify(recipes));
+  },
+
+  saveSupplements(supplements: Supplement[]): void {
+    safeSet(KEYS.SUPPLEMENTS, JSON.stringify(supplements));
+  },
+
+  saveHydration(logs: HydrationLog[]): void {
+    safeSet(KEYS.HYDRATION, JSON.stringify(logs));
+  },
+
+  saveMealPresets(presets: MealPreset[]): void {
+    safeSet(KEYS.PRESETS, JSON.stringify(presets));
   },
 
   clearAll(): void {
