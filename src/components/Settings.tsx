@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { UserGoals, CoachPersonality, MealReminders } from '../types/nutrition';
 import { clampGoal } from '../services/validation';
 import { shareText, isNative } from '../services/native';
-import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload, Bell } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload, Bell, Cloud, CloudUpload, CloudDownload, LogOut } from 'lucide-react';
 
 interface SettingsProps {
   apiKey: string;
@@ -16,6 +16,13 @@ interface SettingsProps {
   exportDataJson: string;
   reminders?: MealReminders;
   onSaveReminders?: (r: MealReminders) => void;
+  cloudConfigured?: boolean;
+  cloudUser?: { email: string | null } | null;
+  onCloudSignIn?: (email: string, password: string) => void | Promise<void>;
+  onCloudSignUp?: (email: string, password: string) => void | Promise<void>;
+  onCloudSignOut?: () => void | Promise<void>;
+  onCloudPush?: () => void | Promise<void>;
+  onCloudPull?: () => void | Promise<void>;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -29,8 +36,23 @@ export const Settings: React.FC<SettingsProps> = ({
   onImportData,
   exportDataJson,
   reminders,
-  onSaveReminders
+  onSaveReminders,
+  cloudConfigured,
+  cloudUser,
+  onCloudSignIn,
+  onCloudSignUp,
+  onCloudSignOut,
+  onCloudPush,
+  onCloudPull
 }) => {
+  const [cloudEmail, setCloudEmail] = useState('');
+  const [cloudPassword, setCloudPassword] = useState('');
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const runCloud = async (fn?: () => void | Promise<void>) => {
+    if (!fn) return;
+    setCloudBusy(true);
+    try { await fn(); } finally { setCloudBusy(false); }
+  };
   const rem: MealReminders = reminders || { enabled: false, breakfast: '08:00', lunch: '12:30', dinner: '18:30' };
   const [remEnabled, setRemEnabled] = useState(rem.enabled);
   const [remBreakfast, setRemBreakfast] = useState(rem.breakfast);
@@ -418,6 +440,55 @@ export const Settings: React.FC<SettingsProps> = ({
             {saveStatus['goals'] ? 'Goals Locked!' : 'Lock Target Budgets'}
           </button>
         </form>
+      </div>
+
+      {/* 3.4 Cloud Sync (Supabase, optional) */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Cloud size={18} color="var(--accent-blue)" /> Cloud Sync
+        </h3>
+
+        {!cloudConfigured ? (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+            Cloud sync is optional and off on this build — your data stays private on this device.
+            To enable cross-device backup, set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> (see SUPABASE.md).
+            You can still use Export / Restore Backup below to move data between devices.
+          </p>
+        ) : cloudUser ? (
+          <>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+              Signed in as <strong style={{ color: 'var(--text-primary)' }}>{cloudUser.email ?? 'your account'}</strong>.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+              <button type="button" disabled={cloudBusy} onClick={() => runCloud(onCloudPush)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
+                <CloudUpload size={16} /> Back up to cloud
+              </button>
+              <button type="button" disabled={cloudBusy} onClick={() => runCloud(onCloudPull)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
+                <CloudDownload size={16} /> Restore from cloud
+              </button>
+              <button type="button" disabled={cloudBusy} onClick={() => runCloud(onCloudSignOut)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
+                <LogOut size={16} /> Sign out
+              </button>
+            </div>
+          </>
+        ) : (
+          <form
+            onSubmit={(e) => { e.preventDefault(); runCloud(() => onCloudSignIn?.(cloudEmail, cloudPassword)); }}
+            style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+          >
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+              Sign in to back up and sync your data across devices.
+            </p>
+            <input type="email" autoComplete="email" required value={cloudEmail} onChange={(e) => setCloudEmail(e.target.value)} placeholder="you@email.com" aria-label="Email"
+              style={{ padding: '0.6rem 0.8rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' }} />
+            <input type="password" autoComplete="current-password" required minLength={6} value={cloudPassword} onChange={(e) => setCloudPassword(e.target.value)} placeholder="Password (6+ characters)" aria-label="Password"
+              style={{ padding: '0.6rem 0.8rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' }} />
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <button type="submit" disabled={cloudBusy} className="btn btn-primary" style={{ padding: '0.6rem 1.1rem', fontSize: '0.85rem' }}>Sign in</button>
+              <button type="button" disabled={cloudBusy} onClick={() => runCloud(() => onCloudSignUp?.(cloudEmail, cloudPassword))} className="btn btn-secondary" style={{ padding: '0.6rem 1.1rem', fontSize: '0.85rem' }}>Create account</button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* 3.5 Meal Reminders */}

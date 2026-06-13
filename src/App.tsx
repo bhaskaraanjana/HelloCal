@@ -5,6 +5,7 @@ import { computeStreak, totalLoggedDays } from './services/insights';
 import { clampGoal, GOAL_BOUNDS } from './services/validation';
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics } from './services/sanitize';
 import { scaleNutrients, autoMealSlot } from './services/logMath';
+import { isSupabaseConfigured, getCurrentUser, onAuthChange, signIn as cloudSignIn, signUp as cloudSignUp, signOut as cloudSignOut, pushData as cloudPush, pullData as cloudPull, type CloudUser } from './services/cloudSync';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -77,6 +78,7 @@ export const App: React.FC = () => {
   });
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
   const [customizerScope, setCustomizerScope] = useState<'general' | 'macronutrients' | 'micronutrients' | 'widgets'>('general');
 
   // Loading indicator on first mount
@@ -176,6 +178,14 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.body.className = `theme-${appSettings.theme}`;
   }, [appSettings.theme]);
+
+  // Track Supabase auth state (no-op when cloud sync isn't configured).
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    getCurrentUser().then(setCloudUser).catch(() => setCloudUser(null));
+    const unsub = onAuthChange(setCloudUser);
+    return unsub;
+  }, []);
 
   // Meal reminders: native schedules repeating local notifications; web fires
   // best-effort foreground nudges (only while the app is open, once per slot/day,
@@ -573,6 +583,61 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error(e);
       return false;
+    }
+  };
+
+  // --- Cloud sync (Supabase, optional) ---
+  const handleCloudSignIn = async (email: string, password: string) => {
+    try {
+      const u = await cloudSignIn(email, password);
+      setCloudUser(u);
+      triggerToast(`Signed in as ${u.email ?? 'your account'}. ☁️`);
+    } catch (e) {
+      triggerToast(e instanceof Error ? e.message : 'Sign-in failed.');
+    }
+  };
+
+  const handleCloudSignUp = async (email: string, password: string) => {
+    try {
+      const { needsConfirmation } = await cloudSignUp(email, password);
+      if (needsConfirmation) {
+        triggerToast('Account created — check your email to confirm, then sign in.');
+      } else {
+        const u = await getCurrentUser();
+        setCloudUser(u);
+        triggerToast('Account created and signed in. ☁️');
+      }
+    } catch (e) {
+      triggerToast(e instanceof Error ? e.message : 'Sign-up failed.');
+    }
+  };
+
+  const handleCloudSignOut = async () => {
+    await cloudSignOut();
+    setCloudUser(null);
+    triggerToast('Signed out of cloud sync.');
+  };
+
+  const handleCloudPush = async () => {
+    try {
+      await cloudPush(backupJsonString);
+      triggerToast('Backed up to the cloud. ☁️✓');
+    } catch (e) {
+      triggerToast(e instanceof Error ? e.message : 'Backup failed.');
+    }
+  };
+
+  const handleCloudPull = async () => {
+    try {
+      const result = await cloudPull();
+      if (!result) {
+        triggerToast('No cloud backup found yet — back up first.');
+        return;
+      }
+      const ok = handleImportJson(result.json);
+      triggerToast(ok ? 'Restored from the cloud. ☁️↓' : 'Cloud backup could not be read.');
+    } catch (e) {
+      triggerToast(e instanceof Error ? e.message : 'Restore failed.');
     }
   };
 
@@ -1068,6 +1133,13 @@ export const App: React.FC = () => {
               exportDataJson={backupJsonString}
               reminders={appSettings.reminders}
               onSaveReminders={handleSaveReminders}
+              cloudConfigured={isSupabaseConfigured()}
+              cloudUser={cloudUser ? { email: cloudUser.email } : null}
+              onCloudSignIn={handleCloudSignIn}
+              onCloudSignUp={handleCloudSignUp}
+              onCloudSignOut={handleCloudSignOut}
+              onCloudPush={handleCloudPush}
+              onCloudPull={handleCloudPull}
             />
           </div>
         )}
