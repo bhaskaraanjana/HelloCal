@@ -18,20 +18,25 @@ export function extractJSON<T = unknown>(raw: string): T {
   }
 
   const trimmed = raw.trim();
-  let text = trimmed;
 
-  // Strip markdown code fences if present. The capture is lazy, so if the JSON
-  // content itself contains a ``` sequence inside a string value, this truncates —
-  // which is why the balanced-object scan below runs against the ORIGINAL trimmed
-  // string (depth-aware, string-literal-respecting) as the authoritative fallback.
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenceMatch) {
-    text = fenceMatch[1].trim();
+  // If the response is fenced, restrict BOTH the fast path and the balanced scan to
+  // the region from the opening fence onward. This excludes any prose before the
+  // fence (which could otherwise supply a wrong balanced object) while still letting
+  // the depth/string-aware scan recover JSON whose string values contain an inner
+  // ``` sequence (which truncates the lazy fence capture). No fence => scan it all.
+  let scanStr = trimmed;
+  let fastText = trimmed;
+  const fenceOpen = trimmed.match(/```(?:json)?\s*/i);
+  if (fenceOpen && fenceOpen.index !== undefined) {
+    const afterOpen = trimmed.slice(fenceOpen.index + fenceOpen[0].length);
+    scanStr = afterOpen;
+    const lazy = afterOpen.match(/([\s\S]*?)```/);
+    fastText = (lazy ? lazy[1] : afterOpen).trim();
   }
 
-  // Fast path: already clean JSON.
+  // Fast path: already-clean JSON (inside the fence, or the whole string).
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(fastText) as T;
   } catch {
     // Fall through to brace extraction.
   }
@@ -39,8 +44,7 @@ export function extractJSON<T = unknown>(raw: string): T {
   // Extract the first balanced {...} block. A naive first-'{'/last-'}' slice breaks
   // when the model emits trailing prose containing a '}' (e.g. inside an emoji-laden
   // coachingMessage), so scan with brace depth while respecting string literals.
-  // Scan the original string first so a lazy-fence truncation can't hide valid JSON.
-  const block = extractBalancedObject(trimmed) ?? extractBalancedObject(text);
+  const block = extractBalancedObject(scanStr);
   if (block) {
     try {
       return JSON.parse(block) as T;

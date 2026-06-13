@@ -102,6 +102,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   // Chosen meal slot; undefined = auto-detect by time of day at save.
   const [mealSlot, setMealSlot] = useState<MealSlot | undefined>(undefined);
   const [logTime, setLogTime] = useState(''); // datetime-local; empty = now (backfill)
+  const [seededLogTime, setSeededLogTime] = useState(''); // value the field opened with
   const [draftAvailable, setDraftAvailable] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -123,7 +124,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       setMealSlot(initialMealType);
       // When editing (or instant-editing) an existing log, seed the When control with
       // its current time so the user can adjust it; a new log defaults to empty (=now).
-      setLogTime(isEditing && initialTimestamp ? toLocalDatetimeInput(initialTimestamp) : '');
+      const seeded = isEditing && initialTimestamp ? toLocalDatetimeInput(initialTimestamp) : '';
+      setLogTime(seeded);
+      setSeededLogTime(seeded);
       // Offer to restore a recent draft for a NEW log only when it differs from
       // the parse we're showing (avoids nagging when nothing was lost).
       if (!isEditing) {
@@ -201,7 +204,12 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
   const handleConfirmSave = () => {
     clearDraft();
-    const parsedTs = logTime ? new Date(logTime).getTime() : NaN;
+    // Only emit a timestamp when the user actually changed the When field. Otherwise
+    // an unchanged edit would round the original time down to the minute (the input's
+    // precision), shifting same-minute meals; passing undefined makes App keep the
+    // original full-precision timestamp.
+    const changed = logTime !== seededLogTime;
+    const parsedTs = changed && logTime ? new Date(logTime).getTime() : NaN;
     const timestamp = Number.isFinite(parsedTs) ? parsedTs : undefined;
     onSave(
       items,

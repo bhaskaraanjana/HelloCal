@@ -4,15 +4,14 @@ import RingProgress from './ui/RingProgress';
 import ProgressBar from './ui/ProgressBar';
 import { computeDailyTotals, sumFieldKey } from '../services/dailyTotals';
 import { gemini } from '../services/gemini';
-import { MICRO_FIELD_ALIASES } from '../services/sanitize';
+import { MICRO_FIELD_ALIASES, DATA_BACKED_MICRO_FIELDS as DATA_BACKED_FIELDS, canonicalMicroUnit } from '../services/sanitize';
 import { useDraggablePanels } from '../hooks/useDraggablePanels';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { Flame, Trophy, Calendar, Sparkles, GripVertical, SlidersHorizontal, ChevronUp, ChevronDown, X, EyeOff, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
-// FoodItem numeric fields the AI parser actually populates — the ONLY keys for
-// which we show a consumed value. A custom micro on any other key is "not tracked"
-// (we never fabricate a 0/limit bar for un-parsed nutrients).
-const DATA_BACKED_FIELDS = new Set(['addedSugar', 'fiber', 'sodium', 'iron', 'sugar', 'protein', 'carbs', 'fat', 'calories']);
+// DATA_BACKED_FIELDS (the FoodItem numeric fields the parser populates — the ONLY
+// keys for which we show a consumed value) and the canonical-unit rule live in
+// services/sanitize so the add path and the load/heal path stay in lockstep.
 const COLOR_PRESETS: { color: string; glowColor: string }[] = [
   { color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)' },
   { color: 'var(--accent-teal)', glowColor: 'var(--accent-teal-glow)' },
@@ -173,9 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const fieldKey = MICRO_FIELD_ALIASES[norm] ?? norm;
       // For data-backed fields the HUD sums the raw FoodItem value (fixed unit:
       // mg for sodium/iron, g otherwise), so force that unit rather than trust the AI.
-      const unit = DATA_BACKED_FIELDS.has(fieldKey)
-        ? (fieldKey === 'sodium' || fieldKey === 'iron' ? 'mg' : 'g')
-        : (info.unit || 'g');
+      const unit = canonicalMicroUnit(fieldKey) ?? (info.unit || 'g');
       saveMicros([...customMicros, {
         id: `micro_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         name: info.name, emoji: info.emoji || '🔬', unit,

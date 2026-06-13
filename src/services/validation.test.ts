@@ -37,6 +37,13 @@ describe('extractJSON', () => {
     expect(extractJSON(raw)).toEqual({ type: 'food', msg: 'use ```code``` blocks', calories: 200 });
   });
 
+  it('prefers the fenced object over a balanced object in pre-fence prose', () => {
+    // When a fence is present, prose before it must not supply a wrong object — even
+    // when the fenced content has an inner ``` that defeats the fast path.
+    const raw = 'Draft: {"type":"workout","activity":"old"} final:```json\n{"type":"food","msg":"```x```","calories":50}\n```';
+    expect(extractJSON(raw)).toEqual({ type: 'food', msg: '```x```', calories: 50 });
+  });
+
   it('throws on unparseable input', () => {
     expect(() => extractJSON('no json here')).toThrow();
     expect(() => extractJSON('')).toThrow();

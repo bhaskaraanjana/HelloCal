@@ -179,6 +179,18 @@ export const MICRO_FIELD_ALIASES: Record<string, string> = {
   calories: 'calories',
 };
 
+/** FoodItem numeric fields the parser populates — the only keys a custom micro can auto-track. */
+export const DATA_BACKED_MICRO_FIELDS = new Set(['addedSugar', 'fiber', 'sodium', 'iron', 'sugar', 'protein', 'carbs', 'fat', 'calories']);
+
+/**
+ * Canonical tracked unit for a data-backed micro field (mg for sodium/iron, g
+ * otherwise), or null for a non-backed field. The HUD sums the raw FoodItem value
+ * ignoring the micro's stored unit, so both the add path and the heal path must
+ * force this unit to avoid a g-vs-mg label mismatch.
+ */
+export const canonicalMicroUnit = (fieldKey: string): string | null =>
+  DATA_BACKED_MICRO_FIELDS.has(fieldKey) ? (fieldKey === 'sodium' || fieldKey === 'iron' ? 'mg' : 'g') : null;
+
 /** Coerce raw custom micronutrient definitions; drops entries missing name/fieldKey. */
 export function sanitizeCustomMicros(raw: unknown): CustomMicro[] {
   if (!Array.isArray(raw)) return [];
@@ -192,11 +204,14 @@ export function sanitizeCustomMicros(raw: unknown): CustomMicro[] {
     // Heal a legacy lowercase backed key (e.g. 'addedsugar' -> 'addedSugar') so
     // already-persisted micros start auto-tracking after this fix.
     fieldKey = MICRO_FIELD_ALIASES[fieldKey.toLowerCase()] ?? fieldKey;
+    // If healing made it data-backed, force the canonical unit so the HUD (which sums
+    // the raw FoodItem value) doesn't label grams as the micro's stale stored unit.
+    const canonUnit = canonicalMicroUnit(fieldKey);
     out.push({
       id: strId(o.id, 'micro'),
       name,
       emoji: typeof o.emoji === 'string' && o.emoji ? o.emoji : '🔬',
-      unit: typeof o.unit === 'string' && o.unit ? o.unit : 'g',
+      unit: canonUnit ?? (typeof o.unit === 'string' && o.unit ? o.unit : 'g'),
       dailyLimit: nonNeg(o.dailyLimit),
       isLimit: o.isLimit === true,
       color: typeof o.color === 'string' && o.color ? o.color : 'var(--accent-purple)',

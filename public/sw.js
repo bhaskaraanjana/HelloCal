@@ -59,8 +59,14 @@ self.addEventListener('fetch', (event) => {
       caches.open(FONT_CACHE).then(async (cache) => {
         const cached = await cache.match(event.request);
         const network = fetch(event.request)
-          .then((res) => {
-            if (res && (res.ok || res.type === 'opaque')) cache.put(event.request, res.clone());
+          .then(async (res) => {
+            if (res && (res.ok || res.type === 'opaque')) {
+              await cache.put(event.request, res.clone());
+              // Bound the font cache (opaque responses are quota-padded) so it can't
+              // grow without limit and pressure the precache. Simple FIFO trim.
+              const keys = await cache.keys();
+              if (keys.length > 30) await cache.delete(keys[0]);
+            }
             return res;
           })
           .catch(() => cached);

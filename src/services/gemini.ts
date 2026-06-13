@@ -312,9 +312,15 @@ Respond with ONLY a JSON object (no markdown):
       { text: `${RECIPE_PARSER_PROMPT}\n\nAnalyze the following recipe description and parse it into structured JSON:\n"${description}"` },
     ]);
     // Run the raw AI output through the same recipe sanitizer used on load, so NaN/
-    // negative/string macros, sub-1 servings, and nameless ingredients can't reach
-    // saved recipes (extractJSON alone trusts whatever the model emits).
-    const [recipe] = sanitizeRecipes([extractJSON(text)]);
+    // negative/string macros and sub-1 servings can't reach saved recipes (extractJSON
+    // alone trusts whatever the model emits). Default a missing name to the description
+    // first, since callers like the per-ingredient auto-estimate only read .ingredients
+    // and a valid nameless ingredient list would otherwise be dropped by the !name gate.
+    const obj = extractJSON<Record<string, unknown>>(text);
+    if (!obj.name || typeof obj.name !== 'string' || !obj.name.trim()) {
+      obj.name = description.slice(0, 60) || 'Recipe';
+    }
+    const [recipe] = sanitizeRecipes([obj]);
     if (!recipe) throw new Error("Couldn't parse a recipe from that. Try listing the ingredients, quantities, and servings.");
     const { id: _id, ...rest } = recipe;
     void _id;

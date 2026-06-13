@@ -346,9 +346,13 @@ export const App: React.FC = () => {
         );
         setLogs(updated);
         storage.saveLogs(updated);
-        // NOTE: do NOT recordFavorites here — favorites were already recorded at the
-        // original log time. Re-bumping on every edit inflates the frequency counter
-        // and skews the Quick-Log/Recents ranking based on edits, not real logging.
+        // Record ONLY items newly introduced during this edit. Items already present
+        // at the original log time were recorded then; re-recording them would inflate
+        // the favorite frequency and skew Quick-Log/Recents toward edits, not real logs.
+        const original = logs.find((l) => l.id === editingLogId);
+        const known = new Set((original?.items ?? []).map((i) => i.name.trim().toLowerCase()));
+        const freshlyAdded = itemsToLog.filter((it) => !known.has(it.name.trim().toLowerCase()));
+        if (freshlyAdded.length > 0) recordFavorites(freshlyAdded);
         triggerToast('Meal updated successfully.');
       }
       setEditingLogId(null);

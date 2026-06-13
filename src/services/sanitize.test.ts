@@ -6,7 +6,37 @@ import {
   sanitizeMealTemplates,
   sanitizeWaterLogs,
   sanitizeBodyMetrics,
+  sanitizeCustomMicros,
+  canonicalMicroUnit,
 } from './sanitize';
+
+describe('sanitizeCustomMicros', () => {
+  it('heals a legacy lowercase backed fieldKey to camelCase', () => {
+    const [m] = sanitizeCustomMicros([{ id: 'x', name: 'Added Sugar', fieldKey: 'addedsugar', unit: 'g', dailyLimit: 30 }]);
+    expect(m.fieldKey).toBe('addedSugar');
+  });
+
+  it('forces the canonical unit when healing makes a micro data-backed (no g/mg mismatch)', () => {
+    // A legacy micro stored with a non-canonical unit must be corrected so the HUD,
+    // which sums the raw gram value, does not mislabel it.
+    const [m] = sanitizeCustomMicros([{ id: 'x', name: 'Added Sugar', fieldKey: 'addedsugar', unit: 'mg', dailyLimit: 30 }]);
+    expect(m.fieldKey).toBe('addedSugar');
+    expect(m.unit).toBe('g');
+  });
+
+  it('leaves a non-backed custom micro unit untouched', () => {
+    const [m] = sanitizeCustomMicros([{ id: 'x', name: 'Potassium', fieldKey: 'potassium', unit: 'mg', dailyLimit: 3500 }]);
+    expect(m.fieldKey).toBe('potassium');
+    expect(m.unit).toBe('mg');
+  });
+
+  it('canonicalMicroUnit: mg for sodium/iron, g for other backed fields, null otherwise', () => {
+    expect(canonicalMicroUnit('sodium')).toBe('mg');
+    expect(canonicalMicroUnit('iron')).toBe('mg');
+    expect(canonicalMicroUnit('addedSugar')).toBe('g');
+    expect(canonicalMicroUnit('potassium')).toBeNull();
+  });
+});
 
 describe('sanitizeMealLogs', () => {
   it('returns [] for non-arrays / junk', () => {

@@ -18,6 +18,7 @@ function hellocalServiceWorker(): Plugin {
   let outDir = 'dist'
   let root = process.cwd()
   let assetUrls: string[] = []
+  let bundleDigest = ''
   const STATIC = [
     '/', '/index.html', '/offline.html', '/manifest.json',
     '/favicon.svg', '/favicon.png', '/icon-192.png', '/icon-512.png',
@@ -34,12 +35,40 @@ function hellocalServiceWorker(): Plugin {
       assetUrls = Object.keys(bundle)
         .filter((f) => /\.(js|css)$/i.test(f))
         .map((f) => '/' + f.split(path.sep).join('/'))
+      // Hash the emitted BYTES (not just filenames) so the cache name reflects actual
+      // content. Vite hashes bundle filenames, but capturing content also covers cases
+      // where a filename is stable.
+      const h = crypto.createHash('sha256')
+      for (const f of Object.keys(bundle).sort()) {
+        const item = bundle[f]
+        h.update(f)
+        if (item.type === 'chunk') h.update(item.code)
+        else h.update(Buffer.isBuffer(item.source) ? item.source : String(item.source))
+      }
+      bundleDigest = h.digest('hex')
     },
     closeBundle() {
       const swPath = path.resolve(root, outDir, 'sw.js')
       if (!fs.existsSync(swPath)) return
       const precache = Array.from(new Set([...STATIC, ...assetUrls]))
-      const hash = crypto.createHash('sha256').update(precache.join('|')).digest('hex').slice(0, 10)
+      // Fold in the on-disk content of the static shell/icons AND the service worker's
+      // own source. This is what guarantees a CONTENT-ONLY deploy (editing index.html,
+      // manifest.json, offline.html, an icon, or sw.js's own fetch/caching logic)
+      // produces a different CACHE_NAME and thus a byte-changed sw.js — the trigger
+      // that makes open tabs detect the update and reload. A filename-only hash would
+      // miss all of these (no JS/CSS bundle gets renamed).
+      const h = crypto.createHash('sha256').update(bundleDigest)
+      const seen = new Set<string>()
+      for (const rel of [...STATIC, '/sw.js']) {
+        const fileRel = rel === '/' ? 'index.html' : rel.replace(/^\//, '')
+        const p = path.resolve(root, outDir, fileRel)
+        if (seen.has(p)) continue
+        seen.add(p)
+        try {
+          if (fs.existsSync(p) && fs.statSync(p).isFile()) h.update(fs.readFileSync(p))
+        } catch { /* ignore unreadable optional asset */ }
+      }
+      const hash = h.digest('hex').slice(0, 12)
       let sw = fs.readFileSync(swPath, 'utf8')
       sw = sw
         .replace(/const CACHE_NAME = '[^']*';.*$/m, `const CACHE_NAME = 'hellocal-cache-${hash}';`)
