@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { MealLog, WorkoutLog, UserGoals } from '../types/nutrition';
 import {
   Trash2,
@@ -125,42 +125,37 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
     item: any;
   }
 
-  const combinedItems: TimelineItem[] = [
-    ...logs.map(log => ({ type: 'food' as const, timestamp: log.timestamp, item: log })),
-    ...workouts.map(w => ({ type: 'workout' as const, timestamp: w.timestamp, item: w }))
-  ];
+  // Build, filter, sort and aggregate the timeline once per data/selection change
+  // rather than on every render (the feed can grow large over time).
+  const { filteredTimeline, dailyCals, dailyProtein, dailyCarbs, dailyFat, dailyBurned } = useMemo(() => {
+    const combined: TimelineItem[] = [
+      ...logs.map(log => ({ type: 'food' as const, timestamp: log.timestamp, item: log })),
+      ...workouts.map(w => ({ type: 'workout' as const, timestamp: w.timestamp, item: w })),
+    ];
 
-  // Filter based on selection mode
-  const filteredTimeline = combinedItems
-    .filter(x => {
-      if (viewMode === 'feed') return true;
-      return isSameDay(x.timestamp, selectedDate.getTime());
-    })
-    .sort((a, b) => b.timestamp - a.timestamp); // newest first
+    const filtered = combined
+      .filter(x => (viewMode === 'feed' ? true : isSameDay(x.timestamp, selectedDate.getTime())))
+      .sort((a, b) => b.timestamp - a.timestamp); // newest first
 
-  // Compute selected day totals
-  let dailyCals = 0;
-  let dailyProtein = 0;
-  let dailyCarbs = 0;
-  let dailyFat = 0;
-  let dailyBurned = 0;
+    let cals = 0, protein = 0, carbs = 0, fat = 0, burned = 0;
+    if (viewMode === 'calendar') {
+      filtered.forEach(x => {
+        if (x.type === 'food') {
+          (x.item as MealLog).items.forEach(item => {
+            cals += Number(item.calories) || 0;
+            protein += Number(item.protein) || 0;
+            carbs += Number(item.carbs) || 0;
+            fat += Number(item.fat) || 0;
+          });
+        } else if (x.type === 'workout') {
+          burned += Number((x.item as WorkoutLog).caloriesBurned) || 0;
+        }
+      });
+    }
 
-  if (viewMode === 'calendar') {
-    filteredTimeline.forEach(x => {
-      if (x.type === 'food') {
-        const log = x.item as MealLog;
-        log.items.forEach(item => {
-          dailyCals += Number(item.calories) || 0;
-          dailyProtein += Number(item.protein) || 0;
-          dailyCarbs += Number(item.carbs) || 0;
-          dailyFat += Number(item.fat) || 0;
-        });
-      } else if (x.type === 'workout') {
-        const w = x.item as WorkoutLog;
-        dailyBurned += Number(w.caloriesBurned) || 0;
-      }
-    });
-  }
+    return { filteredTimeline: filtered, dailyCals: cals, dailyProtein: protein, dailyCarbs: carbs, dailyFat: fat, dailyBurned: burned };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs, workouts, viewMode, selectedDate]);
 
   // Get meal icon based on type
   const getMealIcon = (type: string) => {
