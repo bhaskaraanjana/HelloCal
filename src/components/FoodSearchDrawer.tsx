@@ -110,7 +110,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Search foods">
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
@@ -130,7 +130,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
             <Search size={18} color="var(--accent-purple)" />
             Search Foods
           </h2>
-          <button onClick={onClose} className="btn-icon" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
             <X size={16} />
           </button>
         </div>
@@ -186,6 +186,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
                 <button
                   key={r}
                   type="button"
+                  aria-label={`Recent search: ${r}`}
                   onClick={() => setQuery(r)}
                   style={{
                     display: 'flex',

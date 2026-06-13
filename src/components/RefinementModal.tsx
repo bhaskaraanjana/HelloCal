@@ -327,9 +327,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
     modalLogType === 'mixed' ? 'Log Meal & Workout' : 'Log Meal';
 
   return (
-    <div className="modal-overlay">
-      <div 
-        className="modal-content" 
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Review and refine log">
+      <div
+        className="modal-content"
         style={{ 
           maxHeight: '92vh', 
           display: 'flex', 
@@ -353,7 +353,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
             <Sparkles size={18} color="var(--accent-purple)" />
             Review & Refine Log
           </h2>
-          <button onClick={onClose} className="btn-icon" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
             <X size={16} />
           </button>
         </div>
@@ -598,6 +598,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                           key={label}
                           type="button"
                           onClick={() => applyQuickScale(index, factor)}
+                          aria-label={`Scale ${item.name} by ${label}`}
                           style={{
                             flex: 1,
                             padding: '0.25rem 0',
@@ -667,6 +668,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                     <input
                       autoFocus
+                      aria-label="Preset name"
                       value={presetName}
                       onChange={(e) => setPresetName(e.target.value)}
                       onKeyDown={(e) => {
@@ -706,8 +708,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
         }}>
           <form onSubmit={handleTextCorrectionSubmit} style={{ display: 'flex', gap: '0.6rem', width: '100%', alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: 1 }}>
-              <input 
+              <input
                 type="text"
+                aria-label="Type a correction or command"
                 value={corrInput}
                 onChange={(e) => setCorrInput(e.target.value)}
                 placeholder={apiKey ? "Speak/type corrections (e.g. 'remove the eggs, make yogurt double portion')..." : "Type changes (offline commands support 'remove yogurt', etc)..."}

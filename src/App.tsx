@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from './types/nutrition';
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
+import { clampGoal, GOAL_BOUNDS } from './services/validation';
 import { initNative, haptic, hapticSuccess } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -298,7 +299,7 @@ export const App: React.FC = () => {
       storage.saveLogs(updatedLogs);
       recordFavorites(itemsToLog);
 
-      mealCals = loggedItems.reduce((sum, item) => sum + item.calories, 0);
+      mealCals = loggedItems.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
       foodCount = loggedItems.length;
       savedFood = true;
     }
@@ -328,9 +329,9 @@ export const App: React.FC = () => {
       const startOfToday = today.getTime();
 
       const todayLogs = logs.filter(log => log.timestamp >= startOfToday);
-      let consumed = itemsToLog.reduce((s, i) => s + i.calories, 0);
+      let consumed = itemsToLog.reduce((s, i) => s + (Number(i.calories) || 0), 0);
       todayLogs.forEach(log => {
-        log.items.forEach(item => { consumed += item.calories; });
+        log.items.forEach(item => { consumed += Number(item.calories) || 0; });
       });
 
       const todayWorkouts = workouts.filter(w => w.timestamp >= startOfToday);
@@ -370,17 +371,34 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteLogEntry = (id: string) => {
+    const removed = logs.find(log => log.id === id);
     const updatedLogs = logs.filter(log => log.id !== id);
     setLogs(updatedLogs);
     storage.saveLogs(updatedLogs);
-    triggerToast('Log entry removed.');
+    triggerToast('Log entry removed.', removed ? {
+      label: 'Undo',
+      run: () => {
+        // Restore in timestamp order so the timeline position is preserved.
+        const restored = [removed, ...updatedLogs].sort((a, b) => b.timestamp - a.timestamp);
+        setLogs(restored);
+        storage.saveLogs(restored);
+      },
+    } : undefined);
   };
 
   const handleDeleteWorkoutEntry = (id: string) => {
+    const removed = workouts.find(w => w.id === id);
     const updatedWorkouts = workouts.filter(w => w.id !== id);
     setWorkouts(updatedWorkouts);
     storage.saveWorkouts(updatedWorkouts);
-    triggerToast('Workout entry removed.');
+    triggerToast('Workout entry removed.', removed ? {
+      label: 'Undo',
+      run: () => {
+        const restored = [removed, ...updatedWorkouts].sort((a, b) => b.timestamp - a.timestamp);
+        setWorkouts(restored);
+        storage.saveWorkouts(restored);
+      },
+    } : undefined);
   };
 
   // Open the refinement modal pre-filled with an existing meal's items, in edit mode.
@@ -406,12 +424,12 @@ export const App: React.FC = () => {
     }
     const now = Date.now();
     const copies: MealLog[] = sourceLogs.map((l, i) => ({
-      id: `meal_${now}_${i}`,
+      id: `meal_${now}_${i}_${Math.random().toString(36).slice(2, 7)}`,
       timestamp: now,
       mealType: l.mealType,
       items: l.items.map((it, j) => ({
         ...it,
-        id: `item_${now}_${i}_${j}`,
+        id: `item_${now}_${i}_${j}_${Math.random().toString(36).slice(2, 5)}`,
       })),
     }));
     const updated = [...copies, ...logs];
@@ -443,7 +461,7 @@ export const App: React.FC = () => {
     setLogs(updated);
     storage.saveLogs(updated);
     recordFavorites(log.items.map(({ id, ...rest }) => rest));
-    const cals = log.items.reduce((s, i) => s + i.calories, 0);
+    const cals = log.items.reduce((s, i) => s + (Number(i.calories) || 0), 0);
     triggerToast(`Copied ${log.items.length} item(s) to today (+${Math.round(cals)} kcal).`);
     fireConfetti({ particleCount: 40, spread: 35, origin: { y: 0.8 } });
   };
@@ -452,8 +470,18 @@ export const App: React.FC = () => {
     try {
       const parsed = JSON.parse(jsonData);
       if (Array.isArray(parsed.logs) && parsed.goals) {
+        // Clamp imported goals to safe bounds (a hand-edited backup could be corrupt).
+        const importedGoals: UserGoals = { ...goals };
+        (Object.keys(GOAL_BOUNDS) as (keyof UserGoals)[]).forEach((k) => {
+          if (parsed.goals[k] != null) {
+            importedGoals[k] = clampGoal(k, Number(parsed.goals[k]), goals[k] ?? GOAL_BOUNDS[k].min);
+          }
+        });
         storage.saveLogs(parsed.logs);
-        storage.saveGoals(parsed.goals);
+        storage.saveGoals(importedGoals);
+        // Reflect imported logs/goals in the UI immediately (previously only persisted).
+        setLogs(parsed.logs);
+        setGoals(importedGoals);
         if (parsed.workouts) {
           storage.saveWorkouts(parsed.workouts);
           setWorkouts(parsed.workouts);
@@ -608,7 +636,18 @@ export const App: React.FC = () => {
       sodium: fav.sodium,
       confidence: 'high',
     };
-    handleConfirmSave([item], null);
+    const newId = handleConfirmSave([item], null);
+    triggerToast(`Logged ${item.name} (+${Math.round(Number(item.calories) || 0)} kcal)`, {
+      label: 'Edit',
+      run: () => {
+        setStagedItems([item]);
+        setStagedWorkout(null);
+        setStagedLogType('food');
+        setStagedCoaching('Adjust this item, then save your changes.');
+        setEditingLogId(newId ?? null);
+        setRefinementOpen(true);
+      },
+    });
   };
 
   const handleTogglePin = (id: string) => {
@@ -632,7 +671,18 @@ export const App: React.FC = () => {
   };
 
   const handleApplyTemplate = (t: MealTemplate) => {
-    handleConfirmSave(t.items, null);
+    const newId = handleConfirmSave(t.items, null);
+    triggerToast(`Logged preset "${t.name}"`, {
+      label: 'Edit',
+      run: () => {
+        setStagedItems(t.items.map((it) => ({ ...it })));
+        setStagedWorkout(null);
+        setStagedLogType('food');
+        setStagedCoaching(`Adjust "${t.name}", then save your changes.`);
+        setEditingLogId(newId ?? null);
+        setRefinementOpen(true);
+      },
+    });
   };
 
   const handleDeleteTemplate = (id: string) => {
@@ -689,7 +739,14 @@ export const App: React.FC = () => {
   ) => {
     let newGoals = { ...goals };
     if (Object.keys(updatedGoals).length > 0) {
-      newGoals = { ...goals, ...updatedGoals };
+      // Clamp every AI/voice-driven goal change to safe bounds so a hallucinated
+      // or fat-fingered command ("set calories to 10000") can't corrupt the budget.
+      newGoals = { ...goals };
+      (Object.keys(updatedGoals) as (keyof UserGoals)[]).forEach((k) => {
+        if (k in GOAL_BOUNDS) {
+          newGoals[k] = clampGoal(k, Number(updatedGoals[k]), goals[k] ?? GOAL_BOUNDS[k].min);
+        }
+      });
       setGoals(newGoals);
       storage.saveGoals(newGoals);
     }
@@ -940,7 +997,7 @@ export const App: React.FC = () => {
 
       {/* 5. Sleek Toast Notification Banner */}
       {toast && (
-        <div className="toast-container">
+        <div className="toast-container" aria-live="polite" aria-atomic="true">
           <div className="toast">
             <CheckCircle size={18} color="var(--accent-teal)" />
             <span>{toast.message}</span>

@@ -190,7 +190,7 @@ export const AiCustomizerDrawer: React.FC<AiCustomizerDrawerProps> = ({
   };
 
   return (
-    <div style={{
+    <div role="dialog" aria-modal="true" aria-label="AI dashboard customizer" style={{
       position: 'fixed',
       inset: 0,
       backgroundColor: 'rgba(5, 5, 8, 0.75)',
@@ -251,7 +251,7 @@ export const AiCustomizerDrawer: React.FC<AiCustomizerDrawerProps> = ({
             </div>
           </div>
 
-          <button onClick={onClose} className="btn-icon" style={{ padding: '0.4rem', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ padding: '0.4rem', border: 'none', background: 'transparent', cursor: 'pointer' }}>
             <X size={18} color="var(--text-muted)" />
           </button>
         </div>
@@ -394,6 +394,7 @@ export const AiCustomizerDrawer: React.FC<AiCustomizerDrawerProps> = ({
         <form onSubmit={handleTextSubmit} style={{ display: 'flex', gap: '0.5rem' }}>
           <input
             type="text"
+            aria-label="Type a layout command"
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             disabled={status === 'processing'}

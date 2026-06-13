@@ -655,9 +655,9 @@ h1, h2, h3, h4, h5, h6 {
     min-height: 40px !important;
   }
 
-  /* Relocate Toast Above Bottom Nav */
+  /* Relocate Toast Above Bottom Nav (clear the home-indicator safe area) */
   .toast-container {
-    bottom: 80px !important;
+    bottom: max(80px, calc(80px + env(safe-area-inset-bottom))) !important;
     right: 5% !important;
     left: 5% !important;
     width: 90% !important;
@@ -668,6 +668,12 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center !important;
     padding: 0.8rem 1rem !important;
     font-size: 0.85rem !important;
+  }
+
+  /* Prevent iOS Safari from auto-zooming when focusing a sub-16px input
+     (the macro/portion fields use small inline font sizes by design). */
+  input, textarea, select {
+    font-size: 16px !important;
   }
 }
 
