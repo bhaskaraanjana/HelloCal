@@ -20,6 +20,7 @@ interface RefinementModalProps {
   onSaveTemplate?: (name: string, items: Omit<FoodItem, 'id'>[]) => void;
   weightKg?: number;
   initialMealType?: MealSlot;
+  isEditing?: boolean;
 }
 
 type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -29,6 +30,35 @@ const MEAL_SLOTS: { key: MealSlot; label: string }[] = [
   { key: 'dinner', label: '🍱 Dinner' },
   { key: 'snack', label: '🍎 Snack' },
 ];
+
+// In-progress edits are mirrored to sessionStorage so an accidental close (or a
+// failed correction the user gives up on) doesn't lose a complex meal.
+const DRAFT_KEY = 'halocal_refine_draft';
+const DRAFT_TTL = 30 * 60 * 1000;
+interface RefineDraft {
+  items: Omit<FoodItem, 'id'>[];
+  workout: Omit<WorkoutLog, 'id'> | null;
+  coaching: string;
+  modalLogType: 'food' | 'workout' | 'mixed';
+  ts: number;
+}
+const readDraft = (): RefineDraft | null => {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as RefineDraft;
+    if (!d?.ts || Date.now() - d.ts > DRAFT_TTL) {
+      sessionStorage.removeItem(DRAFT_KEY);
+      return null;
+    }
+    return d;
+  } catch {
+    return null;
+  }
+};
+const clearDraft = () => {
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+};
 
 export const RefinementModal: React.FC<RefinementModalProps> = ({
   isOpen,
@@ -44,7 +74,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   consumedToday = 0,
   onSaveTemplate,
   weightKg,
-  initialMealType
+  initialMealType,
+  isEditing
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
@@ -59,6 +90,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   const [presetName, setPresetName] = useState<string | null>(null);
   // Chosen meal slot; undefined = auto-detect by time of day at save.
   const [mealSlot, setMealSlot] = useState<MealSlot | undefined>(undefined);
+  const [draftAvailable, setDraftAvailable] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -77,8 +109,27 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       setCorrError(null);
       setPresetName(null);
       setMealSlot(initialMealType);
+      // Offer to restore a recent draft for a NEW log only when it differs from
+      // the parse we're showing (avoids nagging when nothing was lost).
+      if (!isEditing) {
+        const d = readDraft();
+        setDraftAvailable(!!d && d.items.length > 0 && JSON.stringify(d.items) !== JSON.stringify(parsedItems));
+      } else {
+        setDraftAvailable(false);
+      }
     }
-  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching, initialMealType]);
+  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching, initialMealType, isEditing]);
+
+  // Mirror in-progress edits to sessionStorage (new logs only — edits have a
+  // persisted source of truth already).
+  useEffect(() => {
+    if (!isOpen || isEditing) return;
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ items, workout, coaching, modalLogType, ts: Date.now() }));
+    } catch {
+      /* ignore */
+    }
+  }, [isOpen, isEditing, items, workout, coaching, modalLogType]);
 
   // Escape-to-close + background scroll lock while the modal is open.
   useEffect(() => {
@@ -151,12 +202,29 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   };
 
   const handleConfirmSave = () => {
+    clearDraft();
     onSave(
       items,
       (modalLogType === 'workout' || modalLogType === 'mixed') ? workout : null,
       modalLogType === 'workout' ? undefined : mealSlot
     );
     onClose();
+  };
+
+  const restoreDraft = () => {
+    const d = readDraft();
+    if (d) {
+      setItems(d.items.map((it) => ({ ...it })));
+      setWorkout(d.workout ? { ...d.workout } : null);
+      setCoaching(d.coaching);
+      setModalLogType(d.modalLogType);
+    }
+    setDraftAvailable(false);
+  };
+
+  const dismissDraft = () => {
+    clearDraft();
+    setDraftAvailable(false);
   };
 
   // 🎙️ VOICE CORRECTION PROCESSORS
@@ -400,7 +468,31 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
         {/* Scrollable Center Form Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
-          
+
+          {/* Unsaved-draft restore prompt */}
+          {draftAvailable && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.6rem',
+              padding: '0.6rem 0.85rem',
+              marginBottom: '1rem',
+              borderRadius: '12px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.2)',
+              fontSize: '0.82rem',
+              color: 'var(--text-secondary)',
+            }}>
+              <span style={{ flex: 1 }}>You have an unsaved draft from earlier.</span>
+              <button type="button" onClick={restoreDraft} className="btn btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.78rem' }}>
+                Restore
+              </button>
+              <button type="button" onClick={dismissDraft} aria-label="Dismiss draft" className="btn-icon" style={{ width: '26px', height: '26px', borderRadius: '50%' }}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
           {/* Active Workout Log Card */}
           {(modalLogType === 'workout' || modalLogType === 'mixed') && workout && (
             <div 

@@ -1054,6 +1054,7 @@ export const App: React.FC = () => {
         onSaveTemplate={handleSaveTemplate}
         weightKg={profile.weightKg}
         initialMealType={stagedMealType}
+        isEditing={editingLogId !== null}
       />
 
       {/* 5. Sleek Toast Notification Banner */}
