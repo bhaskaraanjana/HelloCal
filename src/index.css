@@ -536,6 +536,14 @@ h1, h2, h3, h4, h5, h6 {
   display: none;
 }
 
+/* Draggable/collapsible dashboard panels: responsive auto-fit grid */
+.dashboard-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+
 @media (max-width: 767px) {
   /* Layout Padding Adjustments (leaving gap for bottom sticky tabs) */
   .app-container {
@@ -642,6 +650,24 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 99px !important;
     margin: 8px auto 0 auto !important;
     flex-shrink: 0 !important;
+  }
+
+  /* Dashboard panels stack to one column; settings drawer becomes a bottom sheet */
+  .dashboard-panel-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .panel-settings-drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 24px 24px 0 0 !important;
+    max-height: 90vh !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+    animation: bottomSheetIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+  /* Bigger drag handle for fingers */
+  .dashboard-icon-pill {
+    width: 40px !important;
+    height: 40px !important;
   }
 
   /* Card and Spacing Optimization */

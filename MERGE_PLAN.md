@@ -21,7 +21,7 @@ Branch: `merge-upstream`.
    keep lazy+Suspense; pass workouts; ChartJS.register(...registerables); +Analytics.test.
 6. [ ] HydrationTracker (replace WaterTracker UI), HydrationLog{amount}, hydration CSS vars.
 7. [x] Supplements: state + daily-reset-on-init + widget + AI add (fetchSupplementInfo).
-8. [ ] Dashboard: render customMicros[]; port drag-drop/collapse onto OURS clean Dashboard
+8. [x] Dashboard: render customMicros[]; port drag-drop/collapse onto OURS clean Dashboard
    (NOT upstream monolith); add hydration/supplement/micros panels; fix Dashboard.test.
 9. [x] RecipeBox + CustomModal + Recipes tab; MealPresetsShelf + auto-save-on-keyword.
 10. [ ] FoodTimeline: merge upstream missed-meal modal + clone/preset INTO ours (keep

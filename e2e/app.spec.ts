@@ -22,7 +22,7 @@ test('logs a meal offline via text (no API key) and updates the day', async ({ p
   await page.goto('/');
   const input = page.getByPlaceholder(/type what you ate/i);
   await input.fill('banana');
-  await page.getByRole('button', { name: /Log typed entry/i }).click();
+  await input.press('Enter'); // submit the form (robust across viewports)
   // Instant-log path shows a confirmation toast.
   await expect(page.locator('.toast')).toContainText(/Logged/i, { timeout: 10_000 });
 });

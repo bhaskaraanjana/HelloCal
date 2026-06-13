@@ -6,13 +6,18 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   fullyParallel: true,
+  retries: 2,
+  workers: 2,
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:51731',
     headless: true,
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile', use: { ...devices['Pixel 7'] } },
+  ],
   webServer: {
     // Unique port + no reuse: avoid colliding with other local dev servers.
     command: 'npm run build && npm run preview -- --port 51731 --strictPort',

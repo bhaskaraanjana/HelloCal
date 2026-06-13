@@ -247,6 +247,11 @@ export const App: React.FC = () => {
     fireConfetti({ particleCount: 60, spread: 40, colors: ['#8b5cf6', '#06b6d4', '#10b981'] });
   };
 
+  const handleSaveAppSettings = (next: AppSettings) => {
+    setAppSettings(next);
+    storage.saveAppSettings(next);
+  };
+
   const handleSaveKey = (newKey: string) => {
     setGeminiKey(newKey);
     storage.saveGeminiKey(newKey);
@@ -1131,6 +1136,8 @@ export const App: React.FC = () => {
               goals={goals}
               appSettings={appSettings}
               onTriggerCustomize={handleTriggerCustomize}
+              onSaveGoals={handleSaveGoals}
+              onSaveAppSettings={handleSaveAppSettings}
             />
             {appSettings.visibleWidgets.water !== false && (
               <WaterTracker
