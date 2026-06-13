@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { MealLog, WorkoutLog, UserGoals, AppSettings } from '../types/nutrition';
 import RingProgress from './ui/RingProgress';
 import ProgressBar from './ui/ProgressBar';
@@ -19,43 +19,62 @@ export const Dashboard: React.FC<DashboardProps> = ({
   appSettings,
   onTriggerCustomize
 }) => {
-  // Get start of today (midnight)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const startOfToday = today.getTime();
+  // All of today's totals are derived from the full logs/workouts arrays — memoize
+  // so they only recompute when the underlying data changes, not on every parent
+  // re-render (toasts, modals, theme switches, etc.).
+  const {
+    todayLogs,
+    todayWorkouts,
+    consumedCalories,
+    consumedProtein,
+    consumedCarbs,
+    consumedFat,
+    consumedAddedSugar,
+    consumedFiber,
+    consumedSodium,
+    totalBurnedCalories,
+    totalWorkoutMinutes,
+  } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfToday = today.getTime();
 
-  // Filter logs & workouts for today
-  const todayLogs = logs.filter(log => log.timestamp >= startOfToday);
-  const todayWorkouts = workouts.filter(w => w.timestamp >= startOfToday);
+    const tLogs = logs.filter(log => log.timestamp >= startOfToday);
+    const tWorkouts = workouts.filter(w => w.timestamp >= startOfToday);
 
-  // Sum today's macros, micros, and calories
-  let consumedCalories = 0;
-  let consumedProtein = 0;
-  let consumedCarbs = 0;
-  let consumedFat = 0;
-  let consumedAddedSugar = 0;
-  let consumedFiber = 0;
-  let consumedSodium = 0;
+    const acc = {
+      todayLogs: tLogs,
+      todayWorkouts: tWorkouts,
+      consumedCalories: 0,
+      consumedProtein: 0,
+      consumedCarbs: 0,
+      consumedFat: 0,
+      consumedAddedSugar: 0,
+      consumedFiber: 0,
+      consumedSodium: 0,
+      totalBurnedCalories: 0,
+      totalWorkoutMinutes: 0,
+    };
 
-  todayLogs.forEach(log => {
-    log.items.forEach(item => {
-      consumedCalories += Number(item.calories) || 0;
-      consumedProtein += Number(item.protein) || 0;
-      consumedCarbs += Number(item.carbs) || 0;
-      consumedFat += Number(item.fat) || 0;
-      consumedAddedSugar += Number(item.addedSugar) || Number(item.sugar) || 0;
-      consumedFiber += Number(item.fiber) || 0;
-      consumedSodium += Number(item.sodium) || 0;
+    tLogs.forEach(log => {
+      log.items.forEach(item => {
+        acc.consumedCalories += Number(item.calories) || 0;
+        acc.consumedProtein += Number(item.protein) || 0;
+        acc.consumedCarbs += Number(item.carbs) || 0;
+        acc.consumedFat += Number(item.fat) || 0;
+        acc.consumedAddedSugar += Number(item.addedSugar) || Number(item.sugar) || 0;
+        acc.consumedFiber += Number(item.fiber) || 0;
+        acc.consumedSodium += Number(item.sodium) || 0;
+      });
     });
-  });
 
-  // Sum today's active burn
-  let totalBurnedCalories = 0;
-  let totalWorkoutMinutes = 0;
-  todayWorkouts.forEach(w => {
-    totalBurnedCalories += Number(w.caloriesBurned) || 0;
-    totalWorkoutMinutes += Number(w.duration) || 0;
-  });
+    tWorkouts.forEach(w => {
+      acc.totalBurnedCalories += Number(w.caloriesBurned) || 0;
+      acc.totalWorkoutMinutes += Number(w.duration) || 0;
+    });
+
+    return acc;
+  }, [logs, workouts]);
 
   // Dynamic Calorie halo expansion calculations
   const baseCalorieGoal = Number(goals.calories) || 2000;

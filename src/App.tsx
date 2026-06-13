@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile } from './types/nutrition';
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
@@ -6,7 +6,10 @@ import { initNative, haptic, hapticSuccess } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
 import { FoodTimeline } from './components/FoodTimeline';
-import { Analytics } from './components/Analytics';
+// Analytics pulls in Chart.js (~150KB gzip); load it only when the tab is opened.
+const Analytics = React.lazy(() =>
+  import('./components/Analytics').then((m) => ({ default: m.Analytics }))
+);
 import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
 import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle } from 'lucide-react';
@@ -15,7 +18,11 @@ import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
 import { WaterTracker } from './components/WaterTracker';
 import { StreakBadge } from './components/StreakBadge';
 import { QuickLogBar } from './components/QuickLogBar';
-import { WeightTracker } from './components/WeightTracker';
+// WeightTracker also pulls in Chart.js; lazy-load it alongside Analytics so the
+// charting library stays out of the initial bundle entirely.
+const WeightTracker = React.lazy(() =>
+  import('./components/WeightTracker').then((m) => ({ default: m.WeightTracker }))
+);
 import { Onboarding } from './components/Onboarding';
 import { InstallPrompt } from './components/InstallPrompt';
 import { FoodSearchDrawer } from './components/FoodSearchDrawer';
@@ -829,13 +836,19 @@ export const App: React.FC = () => {
         
         {activeTab === 'analytics' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <Analytics logs={logs} goals={goals} />
-            <WeightTracker
-              metrics={bodyMetrics}
-              preferredUnit={profile.preferredWeightUnit || 'kg'}
-              onAddMetric={handleAddMetric}
-              onDeleteMetric={handleDeleteMetric}
-            />
+            <Suspense fallback={
+              <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
+                Loading analytics…
+              </div>
+            }>
+              <Analytics logs={logs} goals={goals} />
+              <WeightTracker
+                metrics={bodyMetrics}
+                preferredUnit={profile.preferredWeightUnit || 'kg'}
+                onAddMetric={handleAddMetric}
+                onDeleteMetric={handleDeleteMetric}
+              />
+            </Suspense>
           </div>
         )}
         
