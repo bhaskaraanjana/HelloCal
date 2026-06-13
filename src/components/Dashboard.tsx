@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { MealLog, WorkoutLog, UserGoals, AppSettings } from '../types/nutrition';
 import RingProgress from './ui/RingProgress';
 import ProgressBar from './ui/ProgressBar';
+import { computeDailyTotals } from '../services/dailyTotals';
 import { Flame, Trophy, Calendar, Utensils, Sparkles } from 'lucide-react';
 
 interface DashboardProps {
@@ -19,9 +20,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   appSettings,
   onTriggerCustomize
 }) => {
-  // All of today's totals are derived from the full logs/workouts arrays — memoize
-  // so they only recompute when the underlying data changes, not on every parent
-  // re-render (toasts, modals, theme switches, etc.).
+  // All of today's totals come from the shared computeDailyTotals source of truth,
+  // memoized so they only recompute when logs/workouts actually change (not on
+  // every parent re-render from toasts, modals, theme switches, etc.).
   const {
     todayLogs,
     todayWorkouts,
@@ -34,64 +35,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
     consumedSodium,
     totalBurnedCalories,
     totalWorkoutMinutes,
-  } = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfToday = today.getTime();
-
-    const tLogs = logs.filter(log => log.timestamp >= startOfToday);
-    const tWorkouts = workouts.filter(w => w.timestamp >= startOfToday);
-
-    const acc = {
-      todayLogs: tLogs,
-      todayWorkouts: tWorkouts,
-      consumedCalories: 0,
-      consumedProtein: 0,
-      consumedCarbs: 0,
-      consumedFat: 0,
-      consumedAddedSugar: 0,
-      consumedFiber: 0,
-      consumedSodium: 0,
-      totalBurnedCalories: 0,
-      totalWorkoutMinutes: 0,
-    };
-
-    tLogs.forEach(log => {
-      log.items.forEach(item => {
-        acc.consumedCalories += Number(item.calories) || 0;
-        acc.consumedProtein += Number(item.protein) || 0;
-        acc.consumedCarbs += Number(item.carbs) || 0;
-        acc.consumedFat += Number(item.fat) || 0;
-        // Only count added sugar against the added-sugar target. Falling back to
-        // total sugar (as the old code did) blew the target on natural fruit/dairy
-        // sugar and created false "over limit" alarms.
-        acc.consumedAddedSugar += Number(item.addedSugar) || 0;
-        acc.consumedFiber += Number(item.fiber) || 0;
-        acc.consumedSodium += Number(item.sodium) || 0;
-      });
-    });
-
-    tWorkouts.forEach(w => {
-      acc.totalBurnedCalories += Number(w.caloriesBurned) || 0;
-      acc.totalWorkoutMinutes += Number(w.duration) || 0;
-    });
-
-    return acc;
-  }, [logs, workouts]);
+    breakfastCount,
+    lunchCount,
+    dinnerCount,
+    snackCount,
+  } = useMemo(() => computeDailyTotals(logs, workouts), [logs, workouts]);
 
   // Dynamic Calorie halo expansion calculations
   const baseCalorieGoal = Number(goals.calories) || 2000;
   const expandedCalorieGoal = baseCalorieGoal + totalBurnedCalories;
-  
+
   const remainingCalories = Math.max(expandedCalorieGoal - consumedCalories, 0);
   const isOverBudget = consumedCalories > expandedCalorieGoal;
   const overBudgetCals = consumedCalories - expandedCalorieGoal;
-
-  // Meal type counts
-  const breakfastCount = todayLogs.filter(l => l.mealType === 'breakfast').length;
-  const lunchCount = todayLogs.filter(l => l.mealType === 'lunch').length;
-  const dinnerCount = todayLogs.filter(l => l.mealType === 'dinner').length;
-  const snackCount = todayLogs.filter(l => l.mealType === 'snack').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
