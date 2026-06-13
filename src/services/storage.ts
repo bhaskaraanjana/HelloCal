@@ -74,6 +74,12 @@ const DEFAULT_SETTINGS: AppSettings = {
     goalCompletion: true,
     water: true,
     streak: true
+  },
+  reminders: {
+    enabled: false,
+    breakfast: '08:00',
+    lunch: '12:30',
+    dinner: '18:30'
   }
 };
 
@@ -104,7 +110,8 @@ export const storage = {
         ...parsedSettings,
         visibleMacros: { ...DEFAULT_SETTINGS.visibleMacros, ...(parsedSettings.visibleMacros || {}) },
         visibleMicros: { ...DEFAULT_SETTINGS.visibleMicros, ...(parsedSettings.visibleMicros || {}) },
-        visibleWidgets: { ...DEFAULT_SETTINGS.visibleWidgets, ...(parsedSettings.visibleWidgets || {}) }
+        visibleWidgets: { ...DEFAULT_SETTINGS.visibleWidgets, ...(parsedSettings.visibleWidgets || {}) },
+        reminders: { ...DEFAULT_SETTINGS.reminders, ...(parsedSettings.reminders || {}) }
       };
 
       return {

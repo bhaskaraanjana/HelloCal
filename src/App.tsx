@@ -3,7 +3,7 @@ import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachR
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
 import { clampGoal, GOAL_BOUNDS, coerceFoodItem } from './services/validation';
-import { initNative, haptic, hapticSuccess } from './services/native';
+import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
 import { FoodTimeline } from './components/FoodTimeline';
@@ -187,6 +187,43 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.body.className = `theme-${appSettings.theme}`;
   }, [appSettings.theme]);
+
+  // Meal reminders: native schedules repeating local notifications; web fires
+  // best-effort foreground nudges (only while the app is open, once per slot/day,
+  // within 90 min of the slot time).
+  useEffect(() => {
+    const reminders = appSettings.reminders;
+    if (!reminders?.enabled) return;
+    if (isNative()) {
+      scheduleMealReminders(reminders);
+      return;
+    }
+    const slots: [string, string, string][] = [
+      ['breakfast', reminders.breakfast, '🍳 Breakfast time'],
+      ['lunch', reminders.lunch, '🥗 Lunch check-in'],
+      ['dinner', reminders.dinner, '🍱 Dinner time'],
+    ];
+    const tick = () => {
+      const now = new Date();
+      const dayKey = `halocal_reminded_${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      let fired: Record<string, boolean> = {};
+      try { fired = JSON.parse(localStorage.getItem(dayKey) || '{}'); } catch { fired = {}; }
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      for (const [slot, time, title] of slots) {
+        const hm = parseHM(time);
+        if (!hm) continue;
+        const elapsed = nowMin - (hm.hour * 60 + hm.minute);
+        if (!fired[slot] && elapsed >= 0 && elapsed <= 90) {
+          showLocalNotification(title, 'Tap to log your meal in HaloCal.');
+          fired[slot] = true;
+          try { localStorage.setItem(dayKey, JSON.stringify(fired)); } catch { /* ignore */ }
+        }
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 60000);
+    return () => clearInterval(interval);
+  }, [appSettings.reminders]);
 
   // State Updates & Persistence
   const handleSaveGoals = (newGoals: UserGoals) => {
@@ -843,6 +880,23 @@ export const App: React.FC = () => {
     fireConfetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
   };
 
+  const handleSaveReminders = async (reminders: import('./types/nutrition').MealReminders) => {
+    const next = { ...appSettings, reminders };
+    setAppSettings(next);
+    storage.saveAppSettings(next);
+    if (reminders.enabled) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        triggerToast('Enable notifications in your device settings to receive reminders.');
+      } else {
+        triggerToast('Meal reminders saved. 🔔');
+      }
+    } else {
+      triggerToast('Meal reminders turned off.');
+    }
+    scheduleMealReminders(reminders); // native schedules; web is a no-op
+  };
+
   const handleTriggerCustomize = (scope: 'general' | 'macronutrients' | 'micronutrients' | 'widgets') => {
     setCustomizerScope(scope);
     setCustomizerOpen(true);
@@ -1052,6 +1106,8 @@ export const App: React.FC = () => {
               onClearData={handleClearData}
               onImportData={handleImportJson}
               exportDataJson={backupJsonString}
+              reminders={appSettings.reminders}
+              onSaveReminders={handleSaveReminders}
             />
           </div>
         )}

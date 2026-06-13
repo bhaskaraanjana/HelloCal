@@ -117,6 +117,14 @@ export interface AppSettings {
     water?: boolean;
     streak?: boolean;
   };
+  reminders?: MealReminders;
+}
+
+export interface MealReminders {
+  enabled: boolean;
+  breakfast: string; // "HH:MM" 24h local time
+  lunch: string;
+  dinner: string;
 }
 
 export interface CommandResponse {

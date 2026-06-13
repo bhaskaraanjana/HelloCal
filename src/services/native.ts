@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import type { MealReminders } from '../types/nutrition';
 
 export const isNative = (): boolean => Capacitor.isNativePlatform();
 export const getPlatform = (): string => Capacitor.getPlatform();
@@ -93,6 +94,102 @@ export async function shareText(title: string, text: string, filename = 'halocal
     return true;
   } catch {
     return false;
+  }
+}
+
+// ----- Meal reminders -----
+
+type ReminderDef = { id: number; slot: 'breakfast' | 'lunch' | 'dinner'; time: string; title: string; body: string };
+
+const reminderDefs = (r: MealReminders): ReminderDef[] => [
+  { id: 1, slot: 'breakfast', time: r.breakfast, title: '🍳 Breakfast time', body: 'Log your breakfast in HaloCal to stay on your halo.' },
+  { id: 2, slot: 'lunch', time: r.lunch, title: '🥗 Lunch check-in', body: 'Got a minute? Log your lunch in HaloCal.' },
+  { id: 3, slot: 'dinner', time: r.dinner, title: '🍱 Dinner time', body: 'Round out your day — log dinner in HaloCal.' },
+];
+
+export const parseHM = (hm: string): { hour: number; minute: number } | null => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hm || '');
+  if (!m) return null;
+  const hour = Number(m[1]);
+  const minute = Number(m[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+};
+
+/** Request notification permission on native (LocalNotifications) or web (Notification API). */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (isNative()) {
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const res = await LocalNotifications.requestPermissions();
+      return res.display === 'granted';
+    } catch {
+      return false;
+    }
+  }
+  if (typeof Notification === 'undefined') return false;
+  try {
+    if (Notification.permission === 'granted') return true;
+    return (await Notification.requestPermission()) === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Schedule (or clear) daily meal reminders. Native only — uses repeating local
+ * notifications. On web this is a no-op (background web push needs a server);
+ * the app fires best-effort foreground nudges via showLocalNotification instead.
+ */
+export async function scheduleMealReminders(reminders: MealReminders): Promise<void> {
+  if (!isNative()) return;
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    const defs = reminderDefs(reminders);
+    // Always clear the prior meal-reminder set first.
+    await LocalNotifications.cancel({ notifications: defs.map((d) => ({ id: d.id })) });
+    if (!reminders.enabled) return;
+    const perm = await LocalNotifications.requestPermissions();
+    if (perm.display !== 'granted') return;
+    const toSchedule = defs
+      .map((d) => {
+        const hm = parseHM(d.time);
+        if (!hm) return null;
+        return {
+          id: d.id,
+          title: d.title,
+          body: d.body,
+          schedule: { on: { hour: hm.hour, minute: hm.minute }, allowWhileIdle: true, repeats: true },
+        };
+      })
+      .filter(Boolean);
+    if (toSchedule.length) {
+      await LocalNotifications.schedule({ notifications: toSchedule as never });
+    }
+  } catch (e) {
+    console.warn('scheduleMealReminders failed', e);
+  }
+}
+
+/** Fire an immediate notification — native LocalNotifications or a web Notification. */
+export async function showLocalNotification(title: string, body: string): Promise<void> {
+  if (isNative()) {
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') return;
+      await LocalNotifications.schedule({ notifications: [{ id: Math.floor(Math.random() * 100000) + 100, title, body }] as never });
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification(title, { body });
+    }
+  } catch {
+    /* ignore */
   }
 }
 
