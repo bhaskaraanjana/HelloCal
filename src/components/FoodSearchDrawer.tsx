@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { FoodItem } from '../types/nutrition';
 import { searchFoods, type FoodDbResult } from '../services/foodDb';
 import { Search, X, Plus, Clock } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface FoodSearchDrawerProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
   const [recents, setRecents] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(isOpen, containerRef);
 
   // Load recent searches and focus the field on open; reset everything on close.
   useEffect(() => {
@@ -112,6 +115,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Search foods">
       <div
+        ref={containerRef}
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: '88vh', display: 'flex', flexDirection: 'column', position: 'relative' }}

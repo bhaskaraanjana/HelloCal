@@ -3,6 +3,7 @@ import type { FoodItem, WorkoutLog, CoachPersonality } from '../types/nutrition'
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
 import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle, Bookmark } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface RefinementModalProps {
   isOpen: boolean;
@@ -49,6 +50,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(isOpen, containerRef);
 
   // Sync state when modal opens
   useEffect(() => {
@@ -331,6 +334,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Review and refine log">
       <div
+        ref={containerRef}
         className="modal-content"
         style={{ 
           maxHeight: '92vh', 
