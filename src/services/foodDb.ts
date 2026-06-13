@@ -83,17 +83,28 @@ function writeBarcodeCache(barcode: string, result: FoodDbResult): void {
   }
 }
 
-/** Look up a product by barcode (UPC/EAN). Returns null if not found or too sparse. */
+/**
+ * Look up a product by barcode (UPC/EAN). Returns null ONLY for a genuine
+ * not-found (the API answered, no such product). A network/transient failure
+ * throws so the caller can distinguish "type it instead" from "check connection"
+ * — falling back to a cached hit first if we have one.
+ */
 export async function lookupBarcode(barcode: string): Promise<FoodDbResult | null> {
   const cached = readBarcodeCache(barcode);
   if (cached) return cached;
 
   const fields = 'product_name,brands,nutriments,serving_size,serving_quantity';
   const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw new Error('network');
+  }
+  if (!res.ok) throw new Error('network');
+
   const data = await res.json();
-  if (data?.status !== 1 || !data.product) return null;
+  if (data?.status !== 1 || !data.product) return null; // genuine not-found
 
   const item = productToItem(data.product);
   if (!item) return null;

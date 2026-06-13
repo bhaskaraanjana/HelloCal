@@ -179,13 +179,15 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     try {
       const result = await lookupBarcode(code);
       if (!result) {
-        onError('That product was not found in the food database. Try a photo scan or type it instead.');
+        // Genuine not-found — persist inline guidance pointing at the photo/type
+        // actions already on screen, rather than a toast that vanishes.
+        setMicError('That product isn’t in the food database. Snap a photo of the label, search, or type it below instead.');
         return;
       }
       onParsingSuccess(barcodeResultToCoachResponse(result));
     } catch (err: any) {
       console.error('Barcode lookup error:', err);
-      onError('Could not look up that barcode. Please check your connection and try again.');
+      setMicError('Couldn’t reach the food database. Check your connection, or type the item below.');
     } finally {
       setStatus('idle');
     }
