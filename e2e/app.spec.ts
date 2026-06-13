@@ -45,6 +45,26 @@ test('backfill: log a meal to a past date via the When control', async ({ page }
   expect(backdated).toBe(true);
 });
 
+test('instant-logged item can be backfilled to a past date via Edit', async ({ page }) => {
+  await page.goto('/');
+  const input = page.getByPlaceholder(/type what you ate/i);
+  await input.fill('banana'); // high-confidence single item -> instant log
+  await input.press('Enter');
+  // Toast offers an Edit affordance.
+  await page.getByRole('button', { name: /^Edit$/ }).click();
+  // The When control is now available in edit mode (was hidden before).
+  const when = page.getByLabel(/Log date and time/i);
+  await expect(when).toBeVisible({ timeout: 10_000 });
+  await when.fill('2025-02-10T08:15');
+  await page.getByRole('button', { name: /Save Changes|Log Meal/i }).click();
+  const backdated = await page.evaluate(() => {
+    const logs = JSON.parse(localStorage.getItem('hellocal_logs') || '[]');
+    const cutoff = Date.now() - 60 * 24 * 3600 * 1000;
+    return logs.some((l: { timestamp: number }) => l.timestamp < cutoff);
+  });
+  expect(backdated).toBe(true);
+});
+
 test('Analytics tab renders the period selector + charts (the fixed feature)', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: /Analytics/ }).click();

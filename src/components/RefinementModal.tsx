@@ -22,6 +22,14 @@ interface RefinementModalProps {
   weightKg?: number;
   initialMealType?: MealSlot;
   isEditing?: boolean;
+  initialTimestamp?: number; // when editing/instant-editing: seed the When control
+}
+
+/** Format an epoch ms to the local "YYYY-MM-DDTHH:mm" a datetime-local input expects. */
+function toLocalDatetimeInput(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -77,7 +85,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   onSaveTemplate,
   weightKg,
   initialMealType,
-  isEditing
+  isEditing,
+  initialTimestamp
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
@@ -112,7 +121,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       setCorrError(null);
       setPresetName(null);
       setMealSlot(initialMealType);
-      setLogTime('');
+      // When editing (or instant-editing) an existing log, seed the When control with
+      // its current time so the user can adjust it; a new log defaults to empty (=now).
+      setLogTime(isEditing && initialTimestamp ? toLocalDatetimeInput(initialTimestamp) : '');
       // Offer to restore a recent draft for a NEW log only when it differs from
       // the parse we're showing (avoids nagging when nothing was lost).
       if (!isEditing) {
@@ -122,7 +133,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
         setDraftAvailable(false);
       }
     }
-  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching, initialMealType, isEditing]);
+  }, [isOpen, parsedItems, parsedWorkout, logType, initialCoaching, initialMealType, isEditing, initialTimestamp]);
 
   // Mirror in-progress edits to sessionStorage (new logs only — edits have a
   // persisted source of truth already).
@@ -567,24 +578,24 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                 })}
               </div>
 
-              {/* When: log now (default) or backfill a past date/time. */}
-              {!isEditing && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>When</span>
-                  <input
-                    type="datetime-local"
-                    value={logTime}
-                    onChange={(e) => setLogTime(e.target.value)}
-                    aria-label="Log date and time (leave blank for now)"
-                    style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '0.3rem 0.55rem', color: 'var(--text-primary)', fontSize: '0.78rem', outline: 'none' }}
-                  />
-                  {logTime ? (
-                    <button type="button" onClick={() => setLogTime('')} style={{ padding: '0.3rem 0.6rem', borderRadius: '99px', fontSize: '0.72rem', fontWeight: 600, background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer' }}>Now</button>
-                  ) : (
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>= now (set to backfill a missed meal)</span>
-                  )}
-                </div>
-              )}
+              {/* When: log now (default) / backfill a past date/time / change the time
+                  of the meal being edited. Shown in edit mode too so an instant-logged
+                  item can be moved to an earlier time after the fact. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>When</span>
+                <input
+                  type="datetime-local"
+                  value={logTime}
+                  onChange={(e) => setLogTime(e.target.value)}
+                  aria-label="Log date and time (leave blank for now)"
+                  style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '0.3rem 0.55rem', color: 'var(--text-primary)', fontSize: '0.78rem', outline: 'none' }}
+                />
+                {logTime ? (
+                  <button type="button" onClick={() => setLogTime('')} style={{ padding: '0.3rem 0.6rem', borderRadius: '99px', fontSize: '0.72rem', fontWeight: 600, background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer' }}>Now</button>
+                ) : (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>= now (set to backfill a missed meal)</span>
+                )}
+              </div>
 
               {items.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>

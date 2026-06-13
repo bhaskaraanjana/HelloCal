@@ -333,11 +333,22 @@ export const App: React.FC = () => {
         triggerToast('Meal removed.');
       } else {
         const updated = logs.map((l) =>
-          l.id === editingLogId ? { ...l, items: reindexed, mealType: mealTypeOverride ?? l.mealType } : l
+          l.id === editingLogId
+            ? {
+                ...l,
+                items: reindexed,
+                mealType: mealTypeOverride ?? l.mealType,
+                // Allow editing the log's time; keep the original when no explicit
+                // override is supplied (never silently jump an edited meal to "now").
+                timestamp: timestampOverride && Number.isFinite(timestampOverride) ? timestampOverride : l.timestamp,
+              }
+            : l
         );
         setLogs(updated);
         storage.saveLogs(updated);
-        recordFavorites(itemsToLog);
+        // NOTE: do NOT recordFavorites here — favorites were already recorded at the
+        // original log time. Re-bumping on every edit inflates the frequency counter
+        // and skews the Quick-Log/Recents ranking based on edits, not real logging.
         triggerToast('Meal updated successfully.');
       }
       setEditingLogId(null);
@@ -679,7 +690,7 @@ export const App: React.FC = () => {
 
   // --- Water tracking ---
   const handleAddWater = (ml: number) => {
-    const entry: WaterLog = { id: `water_${Date.now()}`, timestamp: Date.now(), milliliters: ml };
+    const entry: WaterLog = { id: `water_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now(), milliliters: ml };
     const updated = [entry, ...waterLogs];
     setWaterLogs(updated);
     storage.saveWater(updated);
@@ -698,7 +709,7 @@ export const App: React.FC = () => {
     extra?: { bodyFat?: number; waist?: number }
   ) => {
     const entry: BodyMetric = {
-      id: `body_${Date.now()}`,
+      id: `body_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
       weight: weightKg,
       unit,
@@ -1265,6 +1276,7 @@ export const App: React.FC = () => {
         weightKg={profile.weightKg}
         initialMealType={stagedMealType}
         isEditing={editingLogId !== null}
+        initialTimestamp={editingLogId ? logs.find((l) => l.id === editingLogId)?.timestamp : undefined}
       />
 
       {/* 5. Sleek Toast Notification Banner */}
