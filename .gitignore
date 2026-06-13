@@ -32,3 +32,9 @@ dist-ssr
 
 # Claude Code local (machine-specific permission grants)
 .claude/settings.local.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
