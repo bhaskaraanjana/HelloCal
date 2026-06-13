@@ -42,6 +42,15 @@ const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = 
   { name: 'Greek Yogurt', quantity: '170 g', calories: 100, protein: 17, carbs: 6, fat: 0.7 },
 ];
 
+// The meal slot HaloCal auto-assigns from the current local time.
+function autoMealSlot(): MealLog['mealType'] {
+  const hour = new Date().getHours();
+  if (hour >= 4 && hour < 11) return 'breakfast';
+  if (hour >= 11 && hour < 16) return 'lunch';
+  if (hour >= 17 && hour < 22) return 'dinner';
+  return 'snack';
+}
+
 // Scale every numeric nutrient field of a logged item by a factor, preserving id.
 const SCALE_KEYS: (keyof FoodItem)[] = ['calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium'];
 function scaleFoodItem(item: FoodItem, factor: number): FoodItem {
@@ -276,6 +285,7 @@ export const App: React.FC = () => {
           setStagedLogType('food');
           setStagedCoaching('Adjust this item, then save your changes.');
           setEditingLogId(newId ?? null);
+          setStagedMealType(autoMealSlot());
           setRefinementOpen(true);
         },
       });
@@ -332,16 +342,7 @@ export const App: React.FC = () => {
     // 1. Handle Food Items
     if (itemsToLog.length > 0) {
       // Use an explicit meal slot if the user picked one, else auto-detect by time.
-      const hour = new Date().getHours();
-      let autoSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack';
-      if (hour >= 4 && hour < 11) {
-        autoSlot = 'breakfast';
-      } else if (hour >= 11 && hour < 16) {
-        autoSlot = 'lunch';
-      } else if (hour >= 17 && hour < 22) {
-        autoSlot = 'dinner';
-      }
-      const mealType = mealTypeOverride ?? autoSlot;
+      const mealType = mealTypeOverride ?? autoMealSlot();
 
       // Add unique IDs to food items
       const loggedItems: FoodItem[] = itemsToLog.map(item => ({
@@ -515,16 +516,10 @@ export const App: React.FC = () => {
   // Duplicate a single past meal onto today (today's auto meal slot, fresh ids).
   const handleCopyMeal = (log: MealLog) => {
     const now = Date.now();
-    const hour = new Date().getHours();
-    let mealType: MealLog['mealType'] = 'snack';
-    if (hour >= 4 && hour < 11) mealType = 'breakfast';
-    else if (hour >= 11 && hour < 16) mealType = 'lunch';
-    else if (hour >= 17 && hour < 22) mealType = 'dinner';
-
     const copy: MealLog = {
       id: `meal_${now}_${Math.random().toString(36).slice(2, 7)}`,
       timestamp: now,
-      mealType,
+      mealType: autoMealSlot(),
       items: log.items.map((it, j) => ({
         ...it,
         id: `item_${now}_${j}_${Math.random().toString(36).slice(2, 5)}`,
@@ -739,6 +734,7 @@ export const App: React.FC = () => {
         setStagedLogType('food');
         setStagedCoaching('Adjust this item, then save your changes.');
         setEditingLogId(newId ?? null);
+        setStagedMealType(autoMealSlot());
         setRefinementOpen(true);
       },
     });
@@ -780,6 +776,7 @@ export const App: React.FC = () => {
         setStagedLogType('food');
         setStagedCoaching(`Adjust "${t.name}", then save your changes.`);
         setEditingLogId(newId ?? null);
+        setStagedMealType(autoMealSlot());
         setRefinementOpen(true);
       },
     });

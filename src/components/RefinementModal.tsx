@@ -40,6 +40,7 @@ interface RefineDraft {
   workout: Omit<WorkoutLog, 'id'> | null;
   coaching: string;
   modalLogType: 'food' | 'workout' | 'mixed';
+  mealSlot?: MealSlot;
   ts: number;
 }
 const readDraft = (): RefineDraft | null => {
@@ -125,11 +126,11 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   useEffect(() => {
     if (!isOpen || isEditing) return;
     try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ items, workout, coaching, modalLogType, ts: Date.now() }));
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ items, workout, coaching, modalLogType, mealSlot, ts: Date.now() }));
     } catch {
       /* ignore */
     }
-  }, [isOpen, isEditing, items, workout, coaching, modalLogType]);
+  }, [isOpen, isEditing, items, workout, coaching, modalLogType, mealSlot]);
 
   // Escape-to-close + background scroll lock while the modal is open.
   useEffect(() => {
@@ -218,6 +219,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       setWorkout(d.workout ? { ...d.workout } : null);
       setCoaching(d.coaching);
       setModalLogType(d.modalLogType);
+      if (d.mealSlot) setMealSlot(d.mealSlot);
     }
     setDraftAvailable(false);
   };
