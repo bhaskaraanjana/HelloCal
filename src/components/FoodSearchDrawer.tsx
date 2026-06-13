@@ -77,6 +77,19 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
     return () => clearTimeout(handle);
   }, [query, isOpen]);
 
+  // Escape-to-close + background scroll lock while open.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const saveRecent = (term: string) => {
