@@ -874,9 +874,9 @@ export const App: React.FC = () => {
         color: 'var(--text-secondary)',
         fontFamily: 'var(--font-display)'
       }}>
-        <img 
-          src="/favicon.png" 
-          alt="HelloCal Logo" 
+        <img
+          src="/logo.svg"
+          alt="HelloCal Logo"
           className="loading-logo"
         />
         <span>Powering HelloCal...</span>
@@ -919,12 +919,12 @@ export const App: React.FC = () => {
       {/* 1. Header Layout & Navigation Tabs */}
       <header className="header">
         <div className="logo-container">
-          <img 
-            src="/favicon.png" 
-            alt="HelloCal Logo" 
+          <img
+            src="/logo.svg"
+            alt="HelloCal Logo"
             className="header-logo"
           />
-          <h1 className="logo-text">Halo<span>Cal</span></h1>
+          <h1 className="logo-text">Hello<span>Cal</span></h1>
         </div>
 
         {/* Dynamic Navigation Board */}
