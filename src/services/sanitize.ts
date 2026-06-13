@@ -70,8 +70,10 @@ export function sanitizeWorkouts(raw: unknown): WorkoutLog[] {
       id: strId((w as { id?: unknown }).id, 'workout'),
       timestamp: nonNeg((w as { timestamp?: unknown }).timestamp) || Date.now(),
       activity,
-      duration: Math.round(nonNeg((w as { duration?: unknown }).duration)),
-      caloriesBurned: Math.round(nonNeg((w as { caloriesBurned?: unknown }).caloriesBurned)),
+      // Mirror validation.coerceWorkout's plausibility ceiling on the storage/import
+      // path so an absurd burn can't reach the calorie budget via a backup restore.
+      duration: Math.min(Math.round(nonNeg((w as { duration?: unknown }).duration)), 1440),
+      caloriesBurned: Math.min(Math.round(nonNeg((w as { caloriesBurned?: unknown }).caloriesBurned)), 5000),
       notes: typeof (w as { notes?: unknown }).notes === 'string' ? (w as { notes: string }).notes : undefined,
     });
   }

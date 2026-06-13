@@ -30,6 +30,24 @@ describe('localParser.parseText (offline fallback)', () => {
     if (egg) expect(egg.confidence).toBe('guess');
   });
 
+  it('treats "16 oz milk" as a fluid-volume ratio (~2 cups), not 16 servings', () => {
+    const res = localParser.parseText('16 oz milk');
+    const milk = res.items!.find((i) => i.name.toLowerCase().includes('milk'));
+    expect(milk).toBeTruthy();
+    // 16 fl oz / 8 fl oz-per-cup ≈ 2 cups; milk serving is 1 cup -> ~2x, not ~16x.
+    expect(milk!.calories).toBeGreaterThan(180);
+    expect(milk!.calories).toBeLessThan(300);
+  });
+
+  it('uses a mass ratio for "8 ounces chicken breast" (~2.26x of a 100g serving)', () => {
+    const res = localParser.parseText('8 ounces chicken breast');
+    const chicken = res.items!.find((i) => i.name.toLowerCase().includes('chicken'));
+    expect(chicken).toBeTruthy();
+    // 8 oz ≈ 226 g vs a 100 g serving -> ~2.26x. chicken breast = 165 kcal/100g.
+    expect(chicken!.calories).toBeGreaterThan(330);
+    expect(chicken!.calories).toBeLessThan(420);
+  });
+
   it('never emits negative or NaN calories', () => {
     for (const q of ['', 'apple and rice', '0 kcal snack', 'water']) {
       const res = localParser.parseText(q);

@@ -17,9 +17,13 @@ export function extractJSON<T = unknown>(raw: string): T {
     throw new Error('Empty AI response.');
   }
 
-  let text = raw.trim();
+  const trimmed = raw.trim();
+  let text = trimmed;
 
-  // Strip markdown code fences if present.
+  // Strip markdown code fences if present. The capture is lazy, so if the JSON
+  // content itself contains a ``` sequence inside a string value, this truncates —
+  // which is why the balanced-object scan below runs against the ORIGINAL trimmed
+  // string (depth-aware, string-literal-respecting) as the authoritative fallback.
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenceMatch) {
     text = fenceMatch[1].trim();
@@ -35,7 +39,8 @@ export function extractJSON<T = unknown>(raw: string): T {
   // Extract the first balanced {...} block. A naive first-'{'/last-'}' slice breaks
   // when the model emits trailing prose containing a '}' (e.g. inside an emoji-laden
   // coachingMessage), so scan with brace depth while respecting string literals.
-  const block = extractBalancedObject(text);
+  // Scan the original string first so a lazy-fence truncation can't hide valid JSON.
+  const block = extractBalancedObject(trimmed) ?? extractBalancedObject(text);
   if (block) {
     try {
       return JSON.parse(block) as T;
@@ -92,7 +97,7 @@ const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-export function coerceFoodItem(raw: any): Omit<FoodItem, 'id'> | null {
+export function coerceFoodItem(raw: any, opts?: { applyDriftGate?: boolean }): Omit<FoodItem, 'id'> | null {
   if (!raw || typeof raw !== 'object') return null;
   const name = typeof raw.name === 'string' ? raw.name.trim() : '';
   if (!name) return null;
@@ -113,8 +118,12 @@ export function coerceFoodItem(raw: any): Omit<FoodItem, 'id'> | null {
   // the stated calories. A large mismatch means the AI hallucinated one of the
   // numbers, which would silently corrupt the user's calorie budget — the app's
   // core source of trust. Flag it as a guess so the refinement UI surfaces it.
+  // ONLY apply to fresh AI output (opts.applyDriftGate): on the load/sanitize path
+  // this would silently re-downgrade already-confirmed 'high' items every reload
+  // (e.g. alcohol/fiber-heavy foods where 4/4/9 genuinely doesn't sum), mutating
+  // persisted, user-trusted data.
   let confidence: 'high' | 'guess' = raw.confidence === 'high' ? 'high' : 'guess';
-  if (calories > 0) {
+  if (opts?.applyDriftGate && calories > 0) {
     const macroKcal = protein * 4 + carbs * 4 + fat * 9;
     const drift = Math.abs(macroKcal - calories) / calories;
     if (drift > 0.2) confidence = 'guess';
@@ -141,10 +150,14 @@ function coerceWorkout(raw: any): Omit<WorkoutLog, 'id' | 'timestamp'> | null {
   const activity = typeof raw.activity === 'string' ? raw.activity.trim() : '';
   if (!activity) return null;
 
+  // Upper-clamp to plausible human limits so a hallucinated burn (e.g. 50000 kcal)
+  // can't silently inflate the eatable calorie budget — the food path has a drift
+  // gate, workouts need an analogous sanity ceiling. 1440 min = 24h; 5000 kcal is a
+  // generous all-day ceiling (an Ironman is ~8000–10000 over many hours, rare here).
   return {
     activity,
-    duration: Math.round(num(raw.duration)),
-    caloriesBurned: Math.round(num(raw.caloriesBurned)),
+    duration: Math.min(Math.round(num(raw.duration)), 1440),
+    caloriesBurned: Math.min(Math.round(num(raw.caloriesBurned)), 5000),
     notes: typeof raw.notes === 'string' ? raw.notes : undefined,
   };
 }
@@ -162,7 +175,7 @@ export function validateCoachResponse(raw: any): CoachResponse {
     raw.type === 'workout' || raw.type === 'mixed' ? raw.type : 'food';
 
   const items = Array.isArray(raw.items)
-    ? raw.items.map(coerceFoodItem).filter(Boolean) as Omit<FoodItem, 'id'>[]
+    ? raw.items.map((it: any) => coerceFoodItem(it, { applyDriftGate: true })).filter(Boolean) as Omit<FoodItem, 'id'>[]
     : [];
 
   const workout = coerceWorkout(raw.workout) as Omit<WorkoutLog, 'id'> | null;

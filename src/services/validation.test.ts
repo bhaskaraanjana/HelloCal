@@ -30,9 +30,41 @@ describe('extractJSON', () => {
     expect(extractJSON('{"a":{"b":2},"c":3}')).toEqual({ a: { b: 2 }, c: 3 });
   });
 
+  it('recovers valid JSON even when a string value contains a ``` fence sequence', () => {
+    // The lazy fence regex would truncate at the inner ```; the balanced scan of the
+    // original string must still recover the full object.
+    const raw = '```json\n{"type":"food","msg":"use ```code``` blocks","calories":200}\n```';
+    expect(extractJSON(raw)).toEqual({ type: 'food', msg: 'use ```code``` blocks', calories: 200 });
+  });
+
   it('throws on unparseable input', () => {
     expect(() => extractJSON('no json here')).toThrow();
     expect(() => extractJSON('')).toThrow();
+  });
+});
+
+describe('coerceFoodItem drift gate is opt-in (preserves stored confidence on load)', () => {
+  it('does NOT downgrade a stored high-confidence item with drifting macros when loaded', () => {
+    // 100 kcal, 0 macros -> drift 1.0. On the load/sanitize path (no opts) it must
+    // keep the user-confirmed 'high', not silently re-flag it as a guess every reload.
+    const item = coerceFoodItem({ name: 'Vodka', calories: 100, protein: 0, carbs: 0, fat: 0, confidence: 'high' });
+    expect(item?.confidence).toBe('high');
+  });
+
+  it('DOES downgrade drifting macros when applyDriftGate is set (fresh AI output)', () => {
+    const item = coerceFoodItem({ name: 'x', calories: 100, protein: 0, carbs: 0, fat: 0, confidence: 'high' }, { applyDriftGate: true });
+    expect(item?.confidence).toBe('guess');
+  });
+});
+
+describe('validateCoachResponse clamps absurd workout burn', () => {
+  it('caps a hallucinated caloriesBurned at 5000 and duration at 1440', () => {
+    const res = validateCoachResponse({
+      type: 'workout',
+      workout: { activity: 'run', duration: 100000, caloriesBurned: 999999 },
+    });
+    expect(res.workout?.caloriesBurned).toBe(5000);
+    expect(res.workout?.duration).toBe(1440);
   });
 });
 

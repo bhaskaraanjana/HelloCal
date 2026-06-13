@@ -68,15 +68,45 @@ export const localParser = {
         let usedWeightRatio = false;
 
         const dbServing = matchedFood.servingSize.toLowerCase();
-        const dbQuantityMatch = dbServing.match(/(\d+)\s*(g|ml|oz)/);
+        const dbQuantityMatch = dbServing.match(/(\d+(?:\.\d+)?)\s*(g|ml|oz)\b/);
 
-        if (dbQuantityMatch && unit && (unit.startsWith('g') || unit.startsWith('m') || unit.startsWith('o'))) {
-          // If both have weight-based units, calculate exact ratio
-          const dbWeight = parseFloat(dbQuantityMatch[1]);
-          // Convert oz to g if needed (approx 28.3)
-          const parsedWeight = unit.startsWith('oz') ? quantityVal * 28.3 : quantityVal;
-          multiplier = parsedWeight / dbWeight;
-          usedWeightRatio = true;
+        // Only take the exact-ratio branch when the user unit and the DB serving unit
+        // are the SAME physical dimension. The old code matched startsWith('m')/('o'),
+        // which conflated 'ml'/'medium' with mass and divided grams by a serving's ml
+        // volume. Classify both sides into mass(grams) / volume(ml) / count, and only
+        // ratio when dimensions agree. 'oz' is ambiguous, so it adapts to the DB side:
+        // mass-oz ≈ 28.3 g, fluid-oz ≈ 29.57 ml.
+        if (dbQuantityMatch) {
+          const dbVal = parseFloat(dbQuantityMatch[1]);
+          const dbUnit = dbQuantityMatch[2]; // g | ml | oz
+          const dbDim: 'mass' | 'vol' = dbUnit === 'ml' ? 'vol' : 'mass';
+          const dbBase = dbUnit === 'oz' ? dbVal * 28.3 : dbVal; // grams (mass) or ml (vol)
+
+          let userDim: 'mass' | 'vol' | 'count' = 'count';
+          let userBase = quantityVal;
+          if (unit === 'g' || unit === 'grams') {
+            userDim = 'mass';
+          } else if (unit === 'oz' || unit === 'ounces') {
+            userDim = dbDim; // mass-oz or fluid-oz, follow the DB serving's dimension
+            userBase = quantityVal * (dbDim === 'vol' ? 29.57 : 28.3);
+          } else if (unit === 'ml') {
+            userDim = 'vol';
+          } else if (unit === 'cup' || unit === 'cups') {
+            userDim = 'vol';
+            userBase = quantityVal * 240;
+          } else if (unit === 'glass' || unit === 'glasses') {
+            userDim = 'vol';
+            userBase = quantityVal * 250;
+          }
+
+          if (userDim !== 'count' && userDim === dbDim && dbBase > 0) {
+            multiplier = userBase / dbBase;
+            usedWeightRatio = true;
+          } else {
+            // Dimension mismatch (e.g. cups of a g-measured food) or a count unit:
+            // fall back to a direct multiplier and let it be flagged as a guess.
+            multiplier = quantityVal;
+          }
         } else {
           // Fallback to direct multiplier (e.g. "3 eggs" vs serving "1 large" -> multiplier = 3)
           multiplier = quantityVal;

@@ -7,6 +7,10 @@ import {
   sanitizePersonality,
   withRetry,
 } from './validation';
+import { sanitizeRecipes } from './sanitize';
+
+const MICRO_UNITS = ['g', 'mg', 'mcg', 'IU'];
+const MICRO_COLORS = ['var(--accent-purple)', 'var(--accent-teal)', 'var(--accent-amber)', 'var(--accent-rose)', 'var(--accent-blue)'];
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -39,7 +43,7 @@ If sugar, addedSugar, fiber, or sodium are not present or negligible, set them t
 Sanity-check every estimate: calories should roughly equal protein*4 + carbs*4 + fat*9 (within ~20%). Never output negative numbers.
 
 For Workout Logging:
-Identify the activity and duration in minutes. Estimate calories burned in kcal using standard MET (Metabolic Equivalent) values, assuming a 75 kg (165 lb) adult unless the user states otherwise. Use the formula: caloriesBurned = MET * 75 * (duration_minutes / 60). Reference METs: walking 3.5, brisk walking 4.3, running (6 mph) 9.8, cycling (moderate) 7.5, swimming 8.0, weightlifting 4.0, yoga 2.5, HIIT 9.0, elliptical 5.0, hiking 6.0. If the user explicitly gives calories burned, use their number.
+Identify the activity and duration in minutes. Estimate calories burned in kcal using standard MET (Metabolic Equivalent) values, assuming a 75 kg (165 lb) adult unless the user states otherwise. Use the standard ACSM formula: caloriesBurned = MET * 3.5 * 75 * duration_minutes / 200. Reference METs: walking 3.5, brisk walking 4.3, running (6 mph) 9.8, cycling (moderate) 7.5, swimming 8.0, weightlifting 4.0, yoga 2.5, HIIT 9.0, elliptical 5.0, hiking 6.0. If the user explicitly gives calories burned, use their number.
 
 You must respond with ONLY a JSON object (no markdown, no prose) matching this exact TypeScript structure:
 {
@@ -151,14 +155,27 @@ async function runModel(apiKey: string, parts: Part[]): Promise<string> {
 
   return withRetry(async () => {
     const result = await model.generateContent(parts as any);
-    return result.response.text();
+    const resp = result.response;
+    // A safety/recitation block or an empty candidate makes the SDK's text() throw an
+    // opaque, non-retryable error ("Text not available. Response was blocked due to
+    // SAFETY"). Detect it and surface a friendly, actionable message instead.
+    const blockReason = resp?.promptFeedback?.blockReason;
+    const finishReason = resp?.candidates?.[0]?.finishReason;
+    if (blockReason || finishReason === 'SAFETY' || finishReason === 'RECITATION' || finishReason === 'OTHER') {
+      throw new Error("The AI couldn't process that input. Try rephrasing, or use a clearer photo.");
+    }
+    try {
+      return resp.text();
+    } catch {
+      throw new Error("The AI returned an empty response. Please try again.");
+    }
   });
 }
 
 /** A per-call instruction that overrides the prompt's default 75 kg assumption. */
 const weightNote = (weightKg?: number): string =>
   weightKg && weightKg > 0
-    ? ` The user weighs ${Math.round(weightKg)} kg; use THIS weight for MET-based workout calorie burn (caloriesBurned = MET * ${Math.round(weightKg)} * minutes/60) unless they explicitly state calories.`
+    ? ` The user weighs ${Math.round(weightKg)} kg; use THIS weight for MET-based workout calorie burn (caloriesBurned = MET * 3.5 * ${Math.round(weightKg)} * minutes / 200, the standard ACSM formula) unless they explicitly state calories.`
     : '';
 
 const audioPart = async (blob: Blob): Promise<Part> => ({
@@ -294,7 +311,14 @@ Respond with ONLY a JSON object (no markdown):
     const text = await runModel(apiKey, [
       { text: `${RECIPE_PARSER_PROMPT}\n\nAnalyze the following recipe description and parse it into structured JSON:\n"${description}"` },
     ]);
-    return extractJSON<Omit<Recipe, 'id'>>(text);
+    // Run the raw AI output through the same recipe sanitizer used on load, so NaN/
+    // negative/string macros, sub-1 servings, and nameless ingredients can't reach
+    // saved recipes (extractJSON alone trusts whatever the model emits).
+    const [recipe] = sanitizeRecipes([extractJSON(text)]);
+    if (!recipe) throw new Error("Couldn't parse a recipe from that. Try listing the ingredients, quantities, and servings.");
+    const { id: _id, ...rest } = recipe;
+    void _id;
+    return rest;
   },
 
   /** Look up clinical info for a custom micronutrient (for the dashboard micro tracker). */
@@ -310,7 +334,24 @@ Respond with ONLY a JSON object (no markdown):
 - "color": ONE of "var(--accent-purple)", "var(--accent-teal)", "var(--accent-amber)", "var(--accent-rose)", "var(--accent-blue)"
 - "glowColor": the matching glow ("var(--accent-purple-glow)", etc.)
 Respond ONLY with the JSON object, no markdown.` }]);
-    return extractJSON(text);
+    const raw = extractJSON<{ name?: unknown; emoji?: unknown; unit?: unknown; dailyLimit?: unknown; isLimit?: unknown; color?: unknown; glowColor?: unknown }>(text);
+    // Constrain the AI output to known units/colors so g-vs-mg confusion or a bogus
+    // CSS var can't poison the micro HUD. The exact fieldKey->canonical-unit forcing
+    // for data-backed nutrients happens in Dashboard.addMicro.
+    const unit = MICRO_UNITS.includes(String(raw.unit)) ? String(raw.unit) : 'g';
+    const colorIdx = MICRO_COLORS.indexOf(String(raw.color));
+    const color = colorIdx >= 0 ? MICRO_COLORS[colorIdx] : 'var(--accent-blue)';
+    const glowColor = colorIdx >= 0 ? color.replace(')', '-glow)') : 'var(--accent-blue-glow)';
+    const dl = Number(raw.dailyLimit);
+    return {
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : name,
+      emoji: typeof raw.emoji === 'string' && raw.emoji ? raw.emoji : '✨',
+      unit,
+      dailyLimit: Number.isFinite(dl) && dl > 0 ? dl : 100,
+      isLimit: raw.isLimit === true,
+      color,
+      glowColor,
+    };
   },
 
   /** Look up standard dosage/schedule for a supplement by name. */
@@ -322,6 +363,11 @@ Respond ONLY with the JSON object, no markdown.` }]);
 - "dosage": the standard recommended daily dosage as a string (e.g. "1 capsule (1000 IU)", "2 softgels (1000mg)")
 - "schedule": the optimal time, exactly one of: "Morning", "Lunch", or "Bedtime"
 Respond ONLY with the JSON object, no markdown.` }]);
-    return extractJSON(text);
+    const raw = extractJSON<{ name?: unknown; dosage?: unknown; schedule?: unknown }>(text);
+    return {
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : name,
+      dosage: typeof raw.dosage === 'string' ? raw.dosage : '',
+      schedule: typeof raw.schedule === 'string' ? raw.schedule : 'Morning',
+    };
   },
 };
