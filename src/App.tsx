@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe } from './types/nutrition';
+import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement } from './types/nutrition';
 import { storage } from './services/storage';
-import { computeStreak, totalLoggedDays } from './services/insights';
+import { computeStreak, totalLoggedDays, isSameLocalDay } from './services/insights';
 import { clampGoal, GOAL_BOUNDS } from './services/validation';
-import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes } from './services/sanitize';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements } from './services/sanitize';
+import { SupplementTracker } from './components/SupplementTracker';
 import { scaleNutrients, autoMealSlot } from './services/logMath';
 import { isSupabaseConfigured, getCurrentUser, onAuthChange, signIn as cloudSignIn, signUp as cloudSignUp, signOut as cloudSignOut, pushData as cloudPush, pullData as cloudPull, type CloudUser } from './services/cloudSync';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
@@ -72,6 +73,7 @@ export const App: React.FC = () => {
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
   const [mealTemplates, setMealTemplates] = useState<MealTemplate[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [profile, setProfile] = useState<UserProfile>({});
   const [onboardingOpen, setOnboardingOpen] = useState(false);
 
@@ -160,6 +162,12 @@ export const App: React.FC = () => {
     }
     setMealTemplates(data.mealTemplates || []);
     setRecipes(data.recipes || []);
+    // Reset "taken today" for supplements last marked on a previous day.
+    const now = Date.now();
+    setSupplements((data.supplements || []).map((s) => ({
+      ...s,
+      takenToday: s.takenToday && !!s.lastTakenTimestamp && isSameLocalDay(s.lastTakenTimestamp, now),
+    })));
     setProfile(data.profile || {});
     // First-run onboarding: only when no profile has been set up yet.
     if (!data.profile?.onboardingComplete) {
@@ -589,6 +597,11 @@ export const App: React.FC = () => {
           storage.saveRecipes(validatedRecipes);
           setRecipes(validatedRecipes);
         }
+        if (parsed.supplements != null) {
+          const validatedSupps = sanitizeSupplements(parsed.supplements);
+          storage.saveSupplements(validatedSupps);
+          setSupplements(validatedSupps);
+        }
         return true;
       }
       return false;
@@ -828,6 +841,18 @@ export const App: React.FC = () => {
     storage.saveMealTemplates(updated);
   };
 
+  // --- Supplements ---
+  const handleSaveSupplements = (next: Supplement[]) => {
+    setSupplements(next);
+    storage.saveSupplements(next);
+  };
+  const handleToggleSupplement = (id: string) => {
+    const next = supplements.map((s) =>
+      s.id === id ? { ...s, takenToday: !s.takenToday, lastTakenTimestamp: !s.takenToday ? Date.now() : s.lastTakenTimestamp } : s
+    );
+    handleSaveSupplements(next);
+  };
+
   // --- Recipes ---
   const handleSaveRecipes = (newRecipes: Recipe[]) => {
     setRecipes(newRecipes);
@@ -885,6 +910,7 @@ export const App: React.FC = () => {
     setFavorites([]);
     setMealTemplates([]);
     setRecipes([]);
+    setSupplements([]);
     setProfile({});
     setGoals({ calories: 2000, protein: 130, carbs: 220, fat: 65, addedSugar: 30, fiber: 30, sodium: 2300, waterTarget: 2500 });
     setGeminiKey('');
@@ -1003,7 +1029,8 @@ export const App: React.FC = () => {
     favorites,
     profile,
     mealTemplates,
-    recipes
+    recipes,
+    supplements
   });
 
   // Derived dashboard values
@@ -1111,6 +1138,15 @@ export const App: React.FC = () => {
                 targetMl={goals.waterTarget || 2500}
                 onAdd={handleAddWater}
                 onUndo={handleUndoWater}
+              />
+            )}
+            {appSettings.visibleWidgets.supplements !== false && (
+              <SupplementTracker
+                supplements={supplements}
+                apiKey={geminiKey}
+                onSave={handleSaveSupplements}
+                onToggleTaken={handleToggleSupplement}
+                onError={(msg) => triggerToast(msg)}
               />
             )}
           </div>

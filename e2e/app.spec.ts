@@ -45,3 +45,16 @@ test('Recipes tab loads the recipe builder', async ({ page }) => {
   await page.getByRole('tab', { name: /Recipes/ }).click();
   await expect(page.getByText(/recipe/i).first()).toBeVisible({ timeout: 15_000 });
 });
+
+test('adds a supplement and toggles taken (offline)', async ({ page }) => {
+  await page.goto('/');
+  const input = page.getByLabel('Supplement name');
+  await expect(input).toBeVisible();
+  await input.fill('Vitamin D3');
+  await page.getByRole('button', { name: 'Add supplement' }).click();
+  // Appears in the list with a taken toggle.
+  const toggle = page.getByRole('button', { name: /Mark Vitamin D3 taken/i });
+  await expect(toggle).toBeVisible({ timeout: 10_000 });
+  await toggle.click();
+  await expect(page.getByRole('button', { name: /Mark Vitamin D3 not taken/i })).toBeVisible();
+});
