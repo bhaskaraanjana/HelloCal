@@ -102,22 +102,61 @@ export async function lookupBarcode(barcode: string): Promise<FoodDbResult | nul
   return result;
 }
 
-/** Free-text product search (for a future manual search UI). Returns up to `limit` matches. */
+const SEARCH_CACHE_PREFIX = 'halocal_search_cache_';
+const SEARCH_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+
+function readSearchCache(key: string): FoodDbResult[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as { ts: number; results: FoodDbResult[] };
+    if (!entry?.ts || Date.now() - entry.ts > SEARCH_CACHE_TTL) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return entry.results;
+  } catch {
+    return null;
+  }
+}
+
+function writeSearchCache(key: string, results: FoodDbResult[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), results }));
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * Free-text product search against Open Food Facts. Caches successful queries for
+ * a week and falls back to that cache when the network is unavailable, so repeat
+ * searches keep working offline. Aborts propagate; a cold network failure rethrows.
+ */
 export async function searchFoods(query: string, limit = 12, signal?: AbortSignal): Promise<FoodDbResult[]> {
   const q = query.trim();
   if (!q) return [];
+  const cacheKey = SEARCH_CACHE_PREFIX + q.toLowerCase();
   const fields = 'code,product_name,brands,nutriments,serving_size';
   const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=${limit}&fields=${fields}`;
-  const res = await fetch(url, { signal });
-  if (!res.ok) return [];
-  const data = await res.json();
-  const products: any[] = Array.isArray(data?.products) ? data.products : [];
-  const results: FoodDbResult[] = [];
-  for (const p of products) {
-    const item = productToItem(p);
-    if (item) results.push({ item, brand: p.brands, barcode: p.code });
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) return readSearchCache(cacheKey) ?? [];
+    const data = await res.json();
+    const products: any[] = Array.isArray(data?.products) ? data.products : [];
+    const results: FoodDbResult[] = [];
+    for (const p of products) {
+      const item = productToItem(p);
+      if (item) results.push({ item, brand: p.brands, barcode: p.code });
+    }
+    if (results.length) writeSearchCache(cacheKey, results);
+    return results;
+  } catch (e) {
+    if ((e as { name?: string })?.name === 'AbortError') throw e;
+    const cached = readSearchCache(cacheKey);
+    if (cached) return cached;
+    throw e;
   }
-  return results;
 }
 
 /** Wrap a barcode result as a CoachResponse so it can flow through the existing staging modal. */

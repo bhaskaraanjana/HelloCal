@@ -15,6 +15,7 @@ interface VoiceInputProps {
   onError: (message: string) => void;
   onOpenSettings?: () => void;
   onOpenSearch?: () => void;
+  weightKg?: number;
 }
 
 export const VoiceInput: React.FC<VoiceInputProps> = ({
@@ -23,7 +24,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   onParsingSuccess,
   onError,
   onOpenSettings,
-  onOpenSearch
+  onOpenSearch,
+  weightKg
 }) => {
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [textInput, setTextInput] = useState('');
@@ -108,7 +110,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
 
     try {
-      const parsedData = await gemini.parseVoice(blob, apiKey, personality);
+      const parsedData = await gemini.parseVoice(blob, apiKey, personality, weightKg);
       onParsingSuccess(parsedData);
     } catch (err: any) {
       console.error('Gemini Audio Error:', err);
@@ -131,7 +133,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     setMicError(null);
 
     try {
-      const parsedData = await gemini.parseImage(blob, apiKey, personality);
+      const parsedData = await gemini.parseImage(blob, apiKey, personality, weightKg);
       onParsingSuccess(parsedData);
     } catch (err: any) {
       console.error('Gemini Photo Error:', err);
@@ -212,7 +214,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
     try {
       if (apiKey) {
-        const parsedData = await gemini.parseText(query, apiKey, personality);
+        const parsedData = await gemini.parseText(query, apiKey, personality, weightKg);
         onParsingSuccess(parsedData);
       } else {
         const parsedData = localParser.parseText(query);

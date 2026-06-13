@@ -895,6 +895,7 @@ export const App: React.FC = () => {
           onError={(msg) => triggerToast(msg)}
           onOpenSettings={() => setActiveTab('settings')}
           onOpenSearch={() => setSearchOpen(true)}
+          weightKg={profile.weightKg}
         />
       </section>
 

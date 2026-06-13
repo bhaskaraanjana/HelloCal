@@ -155,6 +155,12 @@ async function runModel(apiKey: string, parts: Part[]): Promise<string> {
   });
 }
 
+/** A per-call instruction that overrides the prompt's default 75 kg assumption. */
+const weightNote = (weightKg?: number): string =>
+  weightKg && weightKg > 0
+    ? ` The user weighs ${Math.round(weightKg)} kg; use THIS weight for MET-based workout calorie burn (caloriesBurned = MET * ${Math.round(weightKg)} * minutes/60) unless they explicitly state calories.`
+    : '';
+
 const audioPart = async (blob: Blob): Promise<Part> => ({
   inlineData: { data: await blobToBase64(blob), mimeType: blob.type || 'audio/webm' },
 });
@@ -164,10 +170,10 @@ const imagePart = async (blob: Blob): Promise<Part> => ({
 });
 
 export const gemini = {
-  async parseVoice(blob: Blob, apiKey: string, personality: CoachPersonality): Promise<CoachResponse> {
+  async parseVoice(blob: Blob, apiKey: string, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
     if (!apiKey) throw new Error('Gemini API key is required to use Voice Supermode.');
 
-    const promptText = `Analyze the uploaded audio recording. It may contain a food log or workout log or both. Extract metrics accordingly.\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
+    const promptText = `Analyze the uploaded audio recording. It may contain a food log or workout log or both. Extract metrics accordingly.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
     const text = await runModel(apiKey, [
       await audioPart(blob),
@@ -176,19 +182,19 @@ export const gemini = {
     return validateCoachResponse(extractJSON(text));
   },
 
-  async parseText(text: string, apiKey: string, personality: CoachPersonality): Promise<CoachResponse> {
+  async parseText(text: string, apiKey: string, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
     if (!apiKey) throw new Error('Gemini API key is required to use Smart AI Text parsing.');
 
-    const promptText = `Analyze the following text input: "${text}". It may contain a food log or workout log or both. Extract metrics accordingly.\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
+    const promptText = `Analyze the following text input: "${text}". It may contain a food log or workout log or both. Extract metrics accordingly.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
     const response = await runModel(apiKey, [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
     return validateCoachResponse(extractJSON(response));
   },
 
-  async parseImage(blob: Blob, apiKey: string, personality: CoachPersonality): Promise<CoachResponse> {
+  async parseImage(blob: Blob, apiKey: string, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
     if (!apiKey) throw new Error('Gemini API key is required to use Visual Photo Scanning.');
 
-    const promptText = `Analyze the uploaded image. It contains a meal, ingredients, or a nutrition facts label. Identify what it is, estimate portions, and calculate the nutritional metrics.\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
+    const promptText = `Analyze the uploaded image. It contains a meal, ingredients, or a nutrition facts label. Identify what it is, estimate portions, and calculate the nutritional metrics.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
     const text = await runModel(apiKey, [
       await imagePart(blob),
