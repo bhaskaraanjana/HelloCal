@@ -64,6 +64,24 @@ test('Recipes tab loads the recipe builder', async ({ page }) => {
   await expect(page.getByText(/recipe/i).first()).toBeVisible({ timeout: 15_000 });
 });
 
+test('hydration: logging water fills the beaker and persists', async ({ page }) => {
+  await page.goto('/');
+  // The animated hydration beaker is present with quick-add buttons.
+  const add250 = page.getByRole('button', { name: '250ml' });
+  await expect(add250).toBeVisible({ timeout: 10_000 });
+  await add250.click();
+  await add250.click(); // 500ml total
+  // Consumed total reflects the two logs.
+  await expect(page.getByText(/500 \/ \d+ ml/)).toBeVisible();
+  // Persisted to the canonical water store.
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      const w = JSON.parse(localStorage.getItem('hellocal_water') || '[]');
+      return w.reduce((s: number, e: { milliliters: number }) => s + e.milliliters, 0);
+    });
+  }).toBe(500);
+});
+
 test('adds a supplement and toggles taken (offline)', async ({ page }) => {
   await page.goto('/');
   const input = page.getByLabel('Supplement name');

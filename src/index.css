@@ -25,7 +25,11 @@
   --accent-amber-glow: rgba(245, 158, 11, 0.4);
   --accent-rose: #f43f5e;
   --accent-rose-glow: rgba(244, 63, 94, 0.4);
-  
+
+  /* Hydration (distinct cyan/sky, not the macro teal) */
+  --hydration-color: #38bdf8;
+  --hydration-color-glow: rgba(56, 189, 248, 0.4);
+
   /* Fonts */
   --font-display: 'Outfit', sans-serif;
   --font-body: 'Inter', sans-serif;

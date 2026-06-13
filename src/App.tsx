@@ -20,7 +20,7 @@ import { RefinementModal } from './components/RefinementModal';
 import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, History, BookOpen } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
-import { WaterTracker } from './components/WaterTracker';
+import { HydrationTracker } from './components/HydrationTracker';
 import { StreakBadge } from './components/StreakBadge';
 import { QuickLogBar } from './components/QuickLogBar';
 // WeightTracker also pulls in Chart.js; lazy-load it alongside Analytics so the
@@ -688,13 +688,8 @@ export const App: React.FC = () => {
     storage.saveWater(updated);
   };
 
-  const handleUndoWater = () => {
-    const sot = startOfTodayTs();
-    const todays = waterLogs
-      .filter((w) => w.timestamp >= sot)
-      .sort((a, b) => b.timestamp - a.timestamp);
-    if (todays.length === 0) return;
-    const updated = waterLogs.filter((w) => w.id !== todays[0].id);
+  const handleRemoveWater = (id: string) => {
+    const updated = waterLogs.filter((w) => w.id !== id);
     setWaterLogs(updated);
     storage.saveWater(updated);
   };
@@ -1043,9 +1038,6 @@ export const App: React.FC = () => {
 
   // Derived dashboard values
   const startOfToday = startOfTodayTs();
-  const waterTodayMl = waterLogs
-    .filter((w) => w.timestamp >= startOfToday)
-    .reduce((s, w) => s + w.milliliters, 0);
   const streak = computeStreak(logs);
   const lifetimeDays = totalLoggedDays(logs);
 
@@ -1145,11 +1137,11 @@ export const App: React.FC = () => {
               onError={(msg) => triggerToast(msg)}
             />
             {appSettings.visibleWidgets.water !== false && (
-              <WaterTracker
-                todayMl={waterTodayMl}
-                targetMl={goals.waterTarget || 2500}
-                onAdd={handleAddWater}
-                onUndo={handleUndoWater}
+              <HydrationTracker
+                logs={waterLogs.map((w) => ({ id: w.id, timestamp: w.timestamp, amount: w.milliliters }))}
+                goals={{ ...goals, hydration: goals.hydration ?? goals.waterTarget ?? 2000 }}
+                onAddWater={handleAddWater}
+                onRemoveWater={handleRemoveWater}
               />
             )}
             {appSettings.visibleWidgets.supplements !== false && (
