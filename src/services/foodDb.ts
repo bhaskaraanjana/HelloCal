@@ -55,8 +55,39 @@ function productToItem(p: any): Omit<FoodItem, 'id'> | null {
   };
 }
 
+// Cache successful barcode lookups for a week — repeat scans of the same product
+// (very common: pantry staples) then resolve instantly instead of re-hitting OFF.
+const BARCODE_CACHE_PREFIX = 'halocal_barcode_cache_';
+const BARCODE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+
+function readBarcodeCache(barcode: string): FoodDbResult | null {
+  try {
+    const raw = localStorage.getItem(BARCODE_CACHE_PREFIX + barcode);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as { ts: number; result: FoodDbResult };
+    if (!entry?.ts || Date.now() - entry.ts > BARCODE_CACHE_TTL) {
+      localStorage.removeItem(BARCODE_CACHE_PREFIX + barcode);
+      return null;
+    }
+    return entry.result;
+  } catch {
+    return null;
+  }
+}
+
+function writeBarcodeCache(barcode: string, result: FoodDbResult): void {
+  try {
+    localStorage.setItem(BARCODE_CACHE_PREFIX + barcode, JSON.stringify({ ts: Date.now(), result }));
+  } catch {
+    /* quota/unavailable — caching is best-effort */
+  }
+}
+
 /** Look up a product by barcode (UPC/EAN). Returns null if not found or too sparse. */
 export async function lookupBarcode(barcode: string): Promise<FoodDbResult | null> {
+  const cached = readBarcodeCache(barcode);
+  if (cached) return cached;
+
   const fields = 'product_name,brands,nutriments,serving_size,serving_quantity';
   const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`;
   const res = await fetch(url);
@@ -66,7 +97,9 @@ export async function lookupBarcode(barcode: string): Promise<FoodDbResult | nul
 
   const item = productToItem(data.product);
   if (!item) return null;
-  return { item, brand: data.product.brands, barcode };
+  const result: FoodDbResult = { item, brand: data.product.brands, barcode };
+  writeBarcodeCache(barcode, result);
+  return result;
 }
 
 /** Free-text product search (for a future manual search UI). Returns up to `limit` matches. */

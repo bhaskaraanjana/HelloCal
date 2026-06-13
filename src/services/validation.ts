@@ -32,18 +32,45 @@ export function extractJSON<T = unknown>(raw: string): T {
     // Fall through to brace extraction.
   }
 
-  // Extract the outermost {...} block.
-  const first = text.indexOf('{');
-  const last = text.lastIndexOf('}');
-  if (first === -1 || last === -1 || last <= first) {
-    throw new Error('Could not read the AI response. Please try again.');
+  // Extract the first balanced {...} block. A naive first-'{'/last-'}' slice breaks
+  // when the model emits trailing prose containing a '}' (e.g. inside an emoji-laden
+  // coachingMessage), so scan with brace depth while respecting string literals.
+  const block = extractBalancedObject(text);
+  if (block) {
+    try {
+      return JSON.parse(block) as T;
+    } catch {
+      /* fall through to the shared error */
+    }
   }
+  throw new Error('Could not read the AI response. Please try again.');
+}
 
-  try {
-    return JSON.parse(text.slice(first, last + 1)) as T;
-  } catch {
-    throw new Error('Could not read the AI response. Please try again.');
+/** Return the first balanced top-level {...} substring, or null if none. */
+function extractBalancedObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
   }
+  return null;
 }
 
 const VALID_PERSONALITIES: CoachPersonality[] = [
