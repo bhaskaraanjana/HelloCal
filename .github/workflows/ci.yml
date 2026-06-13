@@ -1,0 +1,25 @@
+name: CI
+
+# Quality gate: type-check + production build + unit tests on every push and PR.
+# (Lint is intentionally not gated yet — the legacy codebase has pre-existing
+# eslint failures tracked as a separate cleanup task.)
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type-check & build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
