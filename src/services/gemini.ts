@@ -1,5 +1,14 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse, UserGoals, AppSettings, CommandResponse } from '../types/nutrition';
+import {
+  extractJSON,
+  validateCoachResponse,
+  validateCommandResponse,
+  sanitizePersonality,
+  withRetry,
+} from './validation';
+
+const MODEL_NAME = 'gemini-2.5-flash';
 
 // Helper to convert Blob to Base64 string
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -24,13 +33,14 @@ You must handle three types of entries, which you will classify via the "type" f
 3. "mixed": If the user is logging both meals and physical exercises in a single input.
 
 For Food Logging:
-You must estimate calories and macronutrients (protein, carbs, and fat in grams), as well as key micronutrients (sugar, addedSugar, and fiber in grams; sodium in milligrams) for each food item mentioned. If the portion size is ambiguous, make a smart, realistic estimate based on standard serving sizes and note confidence as "guess" rather than "high".
+You must estimate calories and macronutrients (protein, carbs, and fat in grams), as well as key micronutrients (sugar, addedSugar, and fiber in grams; sodium in milligrams) for each food item mentioned. If the portion size is ambiguous, make a smart, realistic estimate based on standard USDA serving sizes and note confidence as "guess" rather than "high".
 If sugar, addedSugar, fiber, or sodium are not present or negligible, set them to 0.
+Sanity-check every estimate: calories should roughly equal protein*4 + carbs*4 + fat*9 (within ~20%). Never output negative numbers.
 
 For Workout Logging:
-You must identify the activity, calculate the workout duration in minutes, and make a smart, scientifically backed estimate of the calories burned in kcal based on standard MET (Metabolic Equivalent) rates for an average adult, if not explicitly provided by the user.
+Identify the activity and duration in minutes. Estimate calories burned in kcal using standard MET (Metabolic Equivalent) values, assuming a 75 kg (165 lb) adult unless the user states otherwise. Use the formula: caloriesBurned = MET * 75 * (duration_minutes / 60). Reference METs: walking 3.5, brisk walking 4.3, running (6 mph) 9.8, cycling (moderate) 7.5, swimming 8.0, weightlifting 4.0, yoga 2.5, HIIT 9.0, elliptical 5.0, hiking 6.0. If the user explicitly gives calories burned, use their number.
 
-You must respond with a JSON object matching this exact TypeScript structure:
+You must respond with ONLY a JSON object (no markdown, no prose) matching this exact TypeScript structure:
 {
   "type": "food" | "workout" | "mixed",
   "items": [ // only include for "food" or "mixed" types
@@ -90,7 +100,7 @@ Available Cards (Widgets) to Show/Hide (under visibleWidgets):
 Numeric Targets you can update (inside updatedGoals):
 - calories (kcal), protein (g), carbs (g), fat (g), addedSugar (g), fiber (g), sodium (mg).
 
-You MUST respond with a JSON object matching this exact structure:
+You MUST respond with ONLY a JSON object (no markdown, no prose) matching this exact structure:
 {
   "updatedGoals": {
     // Include ONLY targets that were modified by this command. E.g. {"protein": 150} if the user said "make protein goal 150g". Do not include unmodified fields.
@@ -128,136 +138,62 @@ Interpretations:
 - If they say "hide stats card", set visibleWidgets.mealSlots and/or goalCompletion to false.
 `;
 
+type Part = { text: string } | { inlineData: { data: string; mimeType: string } };
+
+/** Build a model + run generateContent with retry/backoff, returning the raw text response. */
+async function runModel(apiKey: string, parts: Part[]): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: MODEL_NAME,
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+
+  return withRetry(async () => {
+    const result = await model.generateContent(parts as any);
+    return result.response.text();
+  });
+}
+
+const audioPart = async (blob: Blob): Promise<Part> => ({
+  inlineData: { data: await blobToBase64(blob), mimeType: blob.type || 'audio/webm' },
+});
+
+const imagePart = async (blob: Blob): Promise<Part> => ({
+  inlineData: { data: await blobToBase64(blob), mimeType: blob.type || 'image/jpeg' },
+});
+
 export const gemini = {
   async parseVoice(blob: Blob, apiKey: string, personality: CoachPersonality): Promise<CoachResponse> {
-    if (!apiKey) {
-      throw new Error('Gemini API key is required to use Voice Supermode.');
-    }
+    if (!apiKey) throw new Error('Gemini API key is required to use Voice Supermode.');
 
-    try {
-      const base64Audio = await blobToBase64(blob);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash',
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      });
+    const promptText = `Analyze the uploaded audio recording. It may contain a food log or workout log or both. Extract metrics accordingly.\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
-      const promptText = `
-Analyze the uploaded audio recording. It may contain a food log or workout log or both. Extract metrics accordingly.
-The requested coaching personality is: "${personality}".
-      `;
-
-      const result = await model.generateContent([
-        {
-          inlineData: {
-            data: base64Audio,
-            mimeType: blob.type || 'audio/webm'
-          }
-        },
-        {
-          text: `${SYSTEM_PROMPT}\n\n${promptText}`
-        }
-      ]);
-
-      const responseText = result.response.text();
-      const parsedData = JSON.parse(responseText) as CoachResponse;
-
-      if (!parsedData.type) {
-        throw new Error('Gemini response did not contain a valid type field.');
-      }
-
-      return parsedData;
-    } catch (error) {
-      console.error('Error parsing voice with Gemini:', error);
-      throw error;
-    }
+    const text = await runModel(apiKey, [
+      await audioPart(blob),
+      { text: `${SYSTEM_PROMPT}\n\n${promptText}` },
+    ]);
+    return validateCoachResponse(extractJSON(text));
   },
 
   async parseText(text: string, apiKey: string, personality: CoachPersonality): Promise<CoachResponse> {
-    if (!apiKey) {
-      throw new Error('Gemini API key is required to use Smart AI Text parsing.');
-    }
+    if (!apiKey) throw new Error('Gemini API key is required to use Smart AI Text parsing.');
 
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash',
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      });
+    const promptText = `Analyze the following text input: "${text}". It may contain a food log or workout log or both. Extract metrics accordingly.\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
-      const promptText = `
-Analyze the following text input: "${text}". It may contain a food log or workout log or both. Extract metrics accordingly.
-The requested coaching personality is: "${personality}".
-      `;
-
-      const result = await model.generateContent([
-        {
-          text: `${SYSTEM_PROMPT}\n\n${promptText}`
-        }
-      ]);
-
-      const responseText = result.response.text();
-      const parsedData = JSON.parse(responseText) as CoachResponse;
-
-      if (!parsedData.type) {
-        throw new Error('Gemini response did not contain a valid type field.');
-      }
-
-      return parsedData;
-    } catch (error) {
-      console.error('Error parsing text with Gemini:', error);
-      throw error;
-    }
+    const response = await runModel(apiKey, [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
+    return validateCoachResponse(extractJSON(response));
   },
 
   async parseImage(blob: Blob, apiKey: string, personality: CoachPersonality): Promise<CoachResponse> {
-    if (!apiKey) {
-      throw new Error('Gemini API key is required to use Visual Photo Scanning.');
-    }
+    if (!apiKey) throw new Error('Gemini API key is required to use Visual Photo Scanning.');
 
-    try {
-      const base64Image = await blobToBase64(blob);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash',
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      });
+    const promptText = `Analyze the uploaded image. It contains a meal, ingredients, or a nutrition facts label. Identify what it is, estimate portions, and calculate the nutritional metrics.\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
-      const promptText = `
-Analyze the uploaded image. It contains a meal, ingredients, or a nutrition facts label. Identify what it is, estimate portions, and calculate the nutritional metrics.
-The requested coaching personality is: "${personality}".
-      `;
-
-      const result = await model.generateContent([
-        {
-          inlineData: {
-            data: base64Image,
-            mimeType: blob.type || 'image/jpeg'
-          }
-        },
-        {
-          text: `${SYSTEM_PROMPT}\n\n${promptText}`
-        }
-      ]);
-
-      const responseText = result.response.text();
-      const parsedData = JSON.parse(responseText) as CoachResponse;
-
-      if (!parsedData.type) {
-        throw new Error('Gemini response did not contain a valid type field.');
-      }
-
-      return parsedData;
-    } catch (error) {
-      console.error('Error parsing image with Gemini:', error);
-      throw error;
-    }
+    const text = await runModel(apiKey, [
+      await imagePart(blob),
+      { text: `${SYSTEM_PROMPT}\n\n${promptText}` },
+    ]);
+    return validateCoachResponse(extractJSON(text));
   },
 
   async correctVoice(
@@ -267,53 +203,21 @@ The requested coaching personality is: "${personality}".
     apiKey: string,
     personality: CoachPersonality
   ): Promise<CoachResponse> {
-    if (!apiKey) {
-      throw new Error('Gemini API key is required.');
-    }
+    if (!apiKey) throw new Error('Gemini API key is required.');
 
-    try {
-      const base64Audio = await blobToBase64(blob);
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash',
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      });
-
-      const promptText = `
+    const promptText = `
 The staged data currently has:
 - Food Items: ${JSON.stringify(currentItems, null, 2)}
 - Workout: ${currentWorkout ? JSON.stringify(currentWorkout, null, 2) : 'None'}
 
 The user spoke this correction, subtraction, or addition in the uploaded audio recording. Analyze it and output the updated full JSON containing type, items, and workout.
-Requested personality: "${personality}".
-      `;
+Requested personality: "${sanitizePersonality(personality)}".`;
 
-      const result = await model.generateContent([
-        {
-          inlineData: {
-            data: base64Audio,
-            mimeType: blob.type || 'audio/webm'
-          }
-        },
-        {
-          text: `${SYSTEM_PROMPT}\n\n${promptText}`
-        }
-      ]);
-
-      const responseText = result.response.text();
-      const parsedData = JSON.parse(responseText) as CoachResponse;
-
-      if (!parsedData.type) {
-        throw new Error('Gemini response did not contain a valid type field.');
-      }
-
-      return parsedData;
-    } catch (error) {
-      console.error('Error applying voice correction with Gemini:', error);
-      throw error;
-    }
+    const text = await runModel(apiKey, [
+      await audioPart(blob),
+      { text: `${SYSTEM_PROMPT}\n\n${promptText}` },
+    ]);
+    return validateCoachResponse(extractJSON(text));
   },
 
   async correctText(
@@ -323,46 +227,18 @@ Requested personality: "${personality}".
     apiKey: string,
     personality: CoachPersonality
   ): Promise<CoachResponse> {
-    if (!apiKey) {
-      throw new Error('Gemini API key is required.');
-    }
+    if (!apiKey) throw new Error('Gemini API key is required.');
 
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash',
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      });
-
-      const promptText = `
+    const promptText = `
 The staged data currently has:
 - Food Items: ${JSON.stringify(currentItems, null, 2)}
 - Workout: ${currentWorkout ? JSON.stringify(currentWorkout, null, 2) : 'None'}
 
 The user wrote this correction: "${text}". Analyze it and output the updated full JSON containing type, items, and workout.
-Requested personality: "${personality}".
-      `;
+Requested personality: "${sanitizePersonality(personality)}".`;
 
-      const result = await model.generateContent([
-        {
-          text: `${SYSTEM_PROMPT}\n\n${promptText}`
-        }
-      ]);
-
-      const responseText = result.response.text();
-      const parsedData = JSON.parse(responseText) as CoachResponse;
-
-      if (!parsedData.type) {
-        throw new Error('Gemini response did not contain a valid type field.');
-      }
-
-      return parsedData;
-    } catch (error) {
-      console.error('Error applying text correction with Gemini:', error);
-      throw error;
-    }
+    const response = await runModel(apiKey, [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
+    return validateCoachResponse(extractJSON(response));
   },
 
   async executeAppCommand(
@@ -372,50 +248,22 @@ Requested personality: "${personality}".
     currentSettings: AppSettings,
     apiKey: string
   ): Promise<CommandResponse> {
-    if (!apiKey) {
-      throw new Error('Gemini API Key is required to run the AI Dashboard Customizer.');
-    }
+    if (!apiKey) throw new Error('Gemini API Key is required to run the AI Dashboard Customizer.');
 
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      });
-
-      const promptText = `
+    const promptText = `
 The current user target goals: ${JSON.stringify(currentGoals, null, 2)}
 The current dashboard visual configurations: ${JSON.stringify(currentSettings, null, 2)}
 
-Interpret the user's design command and output the updated layout details.
-      `;
+Interpret the user's design command and output the updated layout details.`;
 
-      const contentParts: any[] = [];
-
-      if (voiceBlob) {
-        const base64Audio = await blobToBase64(voiceBlob);
-        contentParts.push({
-          inlineData: {
-            data: base64Audio,
-            mimeType: voiceBlob.type || 'audio/webm'
-          }
-        });
-      }
-
-      const queryText = text ? `User command text: "${text}"` : `User command voice audio.`;
-      contentParts.push({
-        text: `${APP_COMMAND_PROMPT}\n\n${promptText}\n\n${queryText}`
-      });
-
-      const result = await model.generateContent(contentParts);
-      const responseText = result.response.text();
-      return JSON.parse(responseText) as CommandResponse;
-    } catch (error) {
-      console.error('Error executing AI layout command:', error);
-      throw error;
+    const parts: Part[] = [];
+    if (voiceBlob) {
+      parts.push(await audioPart(voiceBlob));
     }
-  }
-};
+    const queryText = text ? `User command text: "${text}"` : `User command voice audio.`;
+    parts.push({ text: `${APP_COMMAND_PROMPT}\n\n${promptText}\n\n${queryText}` });
 
+    const response = await runModel(apiKey, parts);
+    return validateCommandResponse(extractJSON(response));
+  },
+};

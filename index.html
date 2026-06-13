@@ -10,7 +10,9 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#8b5cf6" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="HaloCal" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
@@ -19,7 +21,9 @@
     
     <!-- Service Worker Registration & Live Auto-Update System -->
     <script>
-      if ('serviceWorker' in navigator) {
+      // Skip the service worker inside the Capacitor native webview (native handles caching/offline).
+      var __isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+      if (!__isNativeApp && 'serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((reg) => {

@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Claude Code local (machine-specific permission grants)
+.claude/settings.local.json

@@ -1,0 +1,97 @@
+import type { FoodItem, CoachResponse } from '../types/nutrition';
+
+// Open Food Facts — free, public, no key required.
+const OFF_BASE = 'https://world.openfoodfacts.org';
+
+export interface FoodDbResult {
+  item: Omit<FoodItem, 'id'>;
+  brand?: string;
+  barcode?: string;
+}
+
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+
+function productToItem(p: any): Omit<FoodItem, 'id'> | null {
+  const n = p?.nutriments || {};
+  const name =
+    [String(p?.brands || '').split(',')[0]?.trim(), p?.product_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || p?.product_name || 'Scanned product';
+
+  // Prefer per-serving values when the product declares a serving; else fall back to per-100g.
+  const hasServing = n['energy-kcal_serving'] != null || n['proteins_serving'] != null;
+  const suffix = hasServing ? '_serving' : '_100g';
+  const get = (base: string) => n[`${base}${suffix}`];
+
+  const calories = Math.round(num(n[`energy-kcal${suffix}`] ?? n['energy-kcal_100g']));
+  const protein = Math.round(num(get('proteins')) * 10) / 10;
+  const carbs = Math.round(num(get('carbohydrates')) * 10) / 10;
+  const fat = Math.round(num(get('fat')) * 10) / 10;
+  const sugar = Math.round(num(get('sugars')) * 10) / 10;
+  const fiber = Math.round(num(get('fiber')) * 10) / 10;
+  // OFF stores sodium in grams; HaloCal tracks mg.
+  const sodium = Math.round(num(get('sodium')) * 1000);
+
+  // If there is no usable energy value the record is too sparse to be useful.
+  if (calories === 0 && protein === 0 && carbs === 0 && fat === 0) return null;
+
+  const quantity = hasServing ? (p?.serving_size || '1 serving') : '100 g';
+
+  return {
+    name,
+    quantity,
+    calories,
+    protein,
+    carbs,
+    fat,
+    sugar: sugar || undefined,
+    fiber: fiber || undefined,
+    sodium: sodium || undefined,
+    confidence: 'high',
+  };
+}
+
+/** Look up a product by barcode (UPC/EAN). Returns null if not found or too sparse. */
+export async function lookupBarcode(barcode: string): Promise<FoodDbResult | null> {
+  const fields = 'product_name,brands,nutriments,serving_size,serving_quantity';
+  const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (data?.status !== 1 || !data.product) return null;
+
+  const item = productToItem(data.product);
+  if (!item) return null;
+  return { item, brand: data.product.brands, barcode };
+}
+
+/** Free-text product search (for a future manual search UI). Returns up to `limit` matches. */
+export async function searchFoods(query: string, limit = 12, signal?: AbortSignal): Promise<FoodDbResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const fields = 'code,product_name,brands,nutriments,serving_size';
+  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=${limit}&fields=${fields}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const products: any[] = Array.isArray(data?.products) ? data.products : [];
+  const results: FoodDbResult[] = [];
+  for (const p of products) {
+    const item = productToItem(p);
+    if (item) results.push({ item, brand: p.brands, barcode: p.code });
+  }
+  return results;
+}
+
+/** Wrap a barcode result as a CoachResponse so it can flow through the existing staging modal. */
+export function barcodeResultToCoachResponse(result: FoodDbResult): CoachResponse {
+  return {
+    type: 'food',
+    items: [result.item],
+    coachingMessage: `Scanned ${result.item.name} from the Open Food Facts database — verified nutrition for ${result.item.quantity}.`,
+  };
+}

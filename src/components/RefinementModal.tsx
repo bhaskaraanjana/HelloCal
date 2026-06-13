@@ -43,8 +43,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   // Sync state when modal opens
   useEffect(() => {
     if (isOpen) {
-      setItems(JSON.parse(JSON.stringify(parsedItems)));
-      setWorkout(parsedWorkout ? JSON.parse(JSON.stringify(parsedWorkout)) : null);
+      setItems(parsedItems.map((it) => ({ ...it })));
+      setWorkout(parsedWorkout ? { ...parsedWorkout } : null);
       setCoaching(initialCoaching || '');
       setModalLogType(logType);
       setCorrStatus('idle');
@@ -66,6 +66,29 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
   const handleRemoveItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+  };
+
+  // Scale every nutrient field of an item by a factor (calories/sodium are whole
+  // numbers, the rest keep one decimal). Used by both the quick-scale buttons and
+  // the offline portion-correction command so no nutrient is silently left behind.
+  const NUTRIENT_FIELDS: (keyof Omit<FoodItem, 'id'>)[] = [
+    'calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium',
+  ];
+  const scaleNutrients = (item: Omit<FoodItem, 'id'>, factor: number): Omit<FoodItem, 'id'> => {
+    const out: Omit<FoodItem, 'id'> = { ...item };
+    for (const k of NUTRIENT_FIELDS) {
+      const v = out[k];
+      if (typeof v === 'number') {
+        const scaled = v * factor;
+        (out as Record<string, unknown>)[k] =
+          k === 'calories' || k === 'sodium' ? Math.round(scaled) : Math.round(scaled * 10) / 10;
+      }
+    }
+    return out;
+  };
+
+  const applyQuickScale = (index: number, factor: number) => {
+    setItems(items.map((it, i) => (i === index ? scaleNutrients(it, factor) : it)));
   };
 
   const handleAddItem = () => {
@@ -219,34 +242,37 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
       if (match) {
         const targetFood = match[1].trim();
         const newPortion = match[2].trim();
-        
+
+        // Resolve a scale multiplier from words ("double"/"half") or an explicit
+        // "1.5x". If we can't, tell the user instead of silently leaving 1x.
+        let multiplier: number | null = null;
+        if (/\b(double|twice|two|2x)\b/.test(newPortion)) multiplier = 2;
+        else if (/\b(triple|three|3x)\b/.test(newPortion)) multiplier = 3;
+        else if (/\b(half|0\.5x)\b/.test(newPortion)) multiplier = 0.5;
+        else {
+          const m = newPortion.match(/([0-9]*\.?[0-9]+)\s*x/);
+          if (m) multiplier = parseFloat(m[1]);
+        }
+
+        if (multiplier == null || !Number.isFinite(multiplier) || multiplier <= 0) {
+          setCorrError('Could not read that portion — try "double", "half", or "1.5x".');
+          return;
+        }
+
         let changed = false;
         const updated = items.map(item => {
           if (item.name.toLowerCase().includes(targetFood)) {
             changed = true;
-            // Guess scale multiplier
-            let multiplier = 1;
-            if (newPortion.includes('double') || newPortion.includes('2x') || newPortion.includes('two')) multiplier = 2;
-            else if (newPortion.includes('half') || newPortion.includes('0.5x')) multiplier = 0.5;
-            else if (newPortion.includes('triple') || newPortion.includes('3x')) multiplier = 3;
-
-            return {
-              ...item,
-              quantity: newPortion,
-              calories: Math.round(item.calories * multiplier),
-              protein: Math.round(item.protein * multiplier * 10) / 10,
-              carbs: Math.round(item.carbs * multiplier * 10) / 10,
-              fat: Math.round(item.fat * multiplier * 10) / 10
-            };
+            return { ...scaleNutrients(item, multiplier as number), quantity: newPortion };
           }
           return item;
         });
 
         if (changed) {
           setItems(updated);
-          setCoaching('Offline Mode: Updated portion size and scaled nutrients.');
+          setCoaching('Offline Mode: Updated portion size and scaled all nutrients.');
         } else {
-          setCorrError('Offline Command: Could not find matching food to change.');
+          setCorrError(`Offline Command: Could not find "${targetFood}" to change.`);
         }
         return;
       }
@@ -535,8 +561,34 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Quick portion scaling — one tap to halve/grow a serving,
+                        no mental macro math. Multipliers compose on current values. */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>Scale</span>
+                      {([['½×', 0.5], ['1.5×', 1.5], ['2×', 2]] as const).map(([label, factor]) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => applyQuickScale(index, factor)}
+                          style={{
+                            flex: 1,
+                            padding: '0.25rem 0',
+                            borderRadius: '8px',
+                            background: 'rgba(139, 92, 246, 0.08)',
+                            border: '1px solid var(--border-glass)',
+                            color: 'var(--accent-purple)',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
                     {/* Trash Icon */}
-                    <button 
+                    <button
                       onClick={() => handleRemoveItem(index)}
                       style={{
                         position: 'absolute',

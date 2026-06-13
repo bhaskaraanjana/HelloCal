@@ -9,10 +9,10 @@
   --border-glass: rgba(255, 255, 255, 0.06);
   --border-glass-glow: rgba(139, 92, 246, 0.2);
   
-  /* Text colors */
+  /* Text colors (tuned for WCAG AA contrast on the dark glass surfaces) */
   --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-secondary: #aab6c7;
+  --text-muted: #7e8ca1;
   
   /* Neon Accents */
   --accent-purple: #8b5cf6;
@@ -669,5 +669,94 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0.8rem 1rem !important;
     font-size: 0.85rem !important;
   }
+}
+
+/* ♿ ACCESSIBILITY & PLATFORM POLISH */
+
+/* Visible keyboard-focus ring for keyboard/AT users (not on mouse click) */
+:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Don't double up the ring on elements that already render their own focus treatment */
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 1px;
+}
+
+/* Respect reduced-motion preferences: neutralize animations & transitions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only utility (visually hidden, still announced) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Safe-area insets for notched devices & the native iOS/Android shell */
+.app-container {
+  padding-top: max(1.5rem, env(safe-area-inset-top));
+  padding-left: max(1.5rem, env(safe-area-inset-left));
+  padding-right: max(1.5rem, env(safe-area-inset-right));
+}
+@media (max-width: 767px) {
+  .app-container {
+    padding-top: max(1rem, env(safe-area-inset-top)) !important;
+    padding-bottom: max(95px, calc(80px + env(safe-area-inset-bottom))) !important;
+  }
+  /* Lift the fixed bottom nav above the home-indicator / gesture bar */
+  .nav-tabs {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* Prevent long-press selection callouts in the native webview for a more app-like feel */
+.tab-btn,
+.btn,
+.btn-icon {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Tactile press feedback on primary touch targets */
+.btn:active,
+.btn-icon:active,
+.tab-btn:active {
+  transform: scale(0.97);
+}
+
+/* Glass-depth stratification helpers (layered blur for visual hierarchy) */
+.glass-card-deep {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+.glass-card-light {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Over-budget warning pulse for the calorie ring */
+@keyframes ringPulseWarning {
+  0%, 100% { filter: drop-shadow(0 0 4px var(--accent-rose-glow)); }
+  50% { filter: drop-shadow(0 0 12px var(--accent-rose-glow)); }
 }
 

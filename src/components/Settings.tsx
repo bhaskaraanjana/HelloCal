@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import type { UserGoals, CoachPersonality } from '../types/nutrition';
+import { clampGoal } from '../services/validation';
+import { shareText, isNative } from '../services/native';
 import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload } from 'lucide-react';
 
 interface SettingsProps {
@@ -51,15 +53,24 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleSaveGoals = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveGoals({
-      calories: Number(caloriesInput) || 2000,
-      protein: Number(proteinInput) || 130,
-      carbs: Number(carbsInput) || 220,
-      fat: Number(fatInput) || 65,
-      addedSugar: Number(addedSugarInput) || 30,
-      fiber: Number(fiberInput) || 30,
-      sodium: Number(sodiumInput) || 2300
-    });
+    const clamped: UserGoals = {
+      calories: clampGoal('calories', Number(caloriesInput), 2000),
+      protein: clampGoal('protein', Number(proteinInput), 130),
+      carbs: clampGoal('carbs', Number(carbsInput), 220),
+      fat: clampGoal('fat', Number(fatInput), 65),
+      addedSugar: clampGoal('addedSugar', Number(addedSugarInput), 30),
+      fiber: clampGoal('fiber', Number(fiberInput), 30),
+      sodium: clampGoal('sodium', Number(sodiumInput), 2300),
+    };
+    // Reflect any clamping back into the inputs so the user sees the corrected values.
+    setCaloriesInput(clamped.calories);
+    setProteinInput(clamped.protein);
+    setCarbsInput(clamped.carbs);
+    setFatInput(clamped.fat);
+    setAddedSugarInput(clamped.addedSugar!);
+    setFiberInput(clamped.fiber!);
+    setSodiumInput(clamped.sodium!);
+    onSaveGoals(clamped);
     triggerSaveStatus('goals');
   };
 
@@ -69,11 +80,17 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleExport = () => {
+    const filename = `halocal_backup_${new Date().toISOString().split('T')[0]}.json`;
+    // On native, use the share sheet (saves to Files/Drive/email); on web, downloads the file.
+    if (isNative()) {
+      shareText('HaloCal Backup', exportDataJson, filename);
+      return;
+    }
     const blob = new Blob([exportDataJson], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `halocal_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

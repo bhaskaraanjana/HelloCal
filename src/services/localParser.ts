@@ -65,6 +65,7 @@ export const localParser = {
       if (matchedFood) {
         // Calculate multiplier based on quantity and database serving size
         let multiplier = 1;
+        let usedWeightRatio = false;
 
         const dbServing = matchedFood.servingSize.toLowerCase();
         const dbQuantityMatch = dbServing.match(/(\d+)\s*(g|ml|oz)/);
@@ -75,10 +76,16 @@ export const localParser = {
           // Convert oz to g if needed (approx 28.3)
           const parsedWeight = unit.startsWith('oz') ? quantityVal * 28.3 : quantityVal;
           multiplier = parsedWeight / dbWeight;
+          usedWeightRatio = true;
         } else {
           // Fallback to direct multiplier (e.g. "3 eggs" vs serving "1 large" -> multiplier = 3)
           multiplier = quantityVal;
         }
+
+        // Only claim "high" when the name match was strong AND the portion is the
+        // DB serving or a clean weight ratio. A partial word match or a guessed
+        // count-multiplier is an estimate — flag it so the user double-checks.
+        const isEstimate = bestMatchScore < 0.8 || (multiplier !== 1 && !usedWeightRatio);
 
         items.push({
           name: matchedFood.name,
@@ -87,7 +94,7 @@ export const localParser = {
           protein: Math.round(matchedFood.protein * multiplier * 10) / 10,
           carbs: Math.round(matchedFood.carbs * multiplier * 10) / 10,
           fat: Math.round(matchedFood.fat * multiplier * 10) / 10,
-          confidence: 'high'
+          confidence: isEstimate ? 'guess' : 'high'
         });
       } else {
         // If we really can't find anything, try to capture if they typed a raw calorie amount

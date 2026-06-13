@@ -1,7 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera } from 'lucide-react';
+import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera, ScanLine } from 'lucide-react';
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
+import { capturePhotoNative, isNative } from '../services/native';
+import { scanBarcodeNative } from '../services/barcode';
+import { lookupBarcode, barcodeResultToCoachResponse } from '../services/foodDb';
+import { BarcodeScanner } from './BarcodeScanner';
 import type { CoachPersonality, CoachResponse } from '../types/nutrition';
 
 interface VoiceInputProps {
@@ -9,17 +13,20 @@ interface VoiceInputProps {
   personality: CoachPersonality;
   onParsingSuccess: (response: CoachResponse) => void;
   onError: (message: string) => void;
+  onOpenSettings?: () => void;
 }
 
 export const VoiceInput: React.FC<VoiceInputProps> = ({
   apiKey,
   personality,
   onParsingSuccess,
-  onError
+  onError,
+  onOpenSettings
 }) => {
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [textInput, setTextInput] = useState('');
   const [micError, setMicError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -109,11 +116,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   };
 
-  // Process Photo Selection / Native Camera Upload
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // Shared image-processing pipeline (used by both web upload and native camera).
+  const processImageBlob = async (blob: Blob) => {
     if (!apiKey) {
       const errorMsg = 'Gemini API Key is required for visual food photo scanning. Please enter a key in Settings!';
       setMicError(errorMsg);
@@ -125,17 +129,73 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     setMicError(null);
 
     try {
-      const parsedData = await gemini.parseImage(file, apiKey, personality);
+      const parsedData = await gemini.parseImage(blob, apiKey, personality);
       onParsingSuccess(parsedData);
     } catch (err: any) {
       console.error('Gemini Photo Error:', err);
       onError(err.message || 'Failed to parse image. Please take a clearer picture or try again.');
     } finally {
       setStatus('idle');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''; // Reset uploader input
-      }
     }
+  };
+
+  // Process Photo Selection (web file input)
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processImageBlob(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''; // Reset uploader input
+    }
+  };
+
+  // Camera button: native camera on device, file picker on web.
+  const handleCameraClick = async () => {
+    if (!apiKey) {
+      const errorMsg = 'Gemini API Key is required for visual food photo scanning. Please enter a key in Settings!';
+      setMicError(errorMsg);
+      onError(errorMsg);
+      return;
+    }
+    if (isNative()) {
+      const blob = await capturePhotoNative();
+      if (blob) {
+        await processImageBlob(blob);
+        return;
+      }
+      // Fall through to web input if native capture returned nothing.
+    }
+    fileInputRef.current?.click();
+  };
+
+  // Resolve a scanned barcode against the food database and stage the result.
+  const resolveBarcode = async (code: string) => {
+    setStatus('processing');
+    setMicError(null);
+    try {
+      const result = await lookupBarcode(code);
+      if (!result) {
+        onError('That product was not found in the food database. Try a photo scan or type it instead.');
+        return;
+      }
+      onParsingSuccess(barcodeResultToCoachResponse(result));
+    } catch (err: any) {
+      console.error('Barcode lookup error:', err);
+      onError('Could not look up that barcode. Please check your connection and try again.');
+    } finally {
+      setStatus('idle');
+    }
+  };
+
+  // Barcode button: native ML Kit scanner on device, web camera modal in the browser.
+  const handleScanClick = async () => {
+    setMicError(null);
+    if (isNative()) {
+      const code = await scanBarcodeNative();
+      if (code) await resolveBarcode(code);
+      return;
+    }
+    setScannerOpen(true);
   };
 
   // Process Text Inputs
@@ -217,9 +277,9 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '420px', margin: '0 auto' }}>
             {status === 'idle' && (
-              apiKey 
-                ? 'Tap mic to talk, tap camera to upload/scan a food photo, or type below! (e.g. "I did a 40 min run")'
-                : 'Type your food/workouts below, or add your Gemini API Key in Settings to unlock premium voice and camera photo tracking!'
+              apiKey
+                ? 'Talk, snap a food photo, scan a barcode, or type below! (e.g. "I did a 40 min run")'
+                : 'Scan a barcode or type your food/workouts below. Add a Gemini API key in Settings to unlock voice & photo AI tracking!'
             )}
             {status === 'recording' && 'Speak clearly! Mention ingredients, portions, or workout duration.'}
             {status === 'processing' && 'Gemini is scanning visual details and scaling metrics...'}
@@ -253,9 +313,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           {status === 'idle' ? (
             <>
               {/* Voice Pill */}
-              <button 
+              <button
                 onClick={startRecording}
                 title="Voice Log"
+                aria-label="Start voice logging"
                 style={{
                   width: '80px',
                   height: '80px',
@@ -284,9 +345,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               </button>
 
               {/* Camera Pill */}
-              <button 
-                onClick={() => fileInputRef.current?.click()}
+              <button
+                onClick={handleCameraClick}
                 title="Photo Scan"
+                aria-label="Scan a food photo"
                 style={{
                   width: '80px',
                   height: '80px',
@@ -313,10 +375,43 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               >
                 <Camera size={32} />
               </button>
+
+              {/* Barcode Pill */}
+              <button
+                onClick={handleScanClick}
+                title="Scan Barcode"
+                aria-label="Scan a product barcode"
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent-amber)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-primary)',
+                  boxShadow: '0 0 20px var(--accent-amber-glow)',
+                  transition: 'var(--transition-spring)',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 0 30px var(--accent-amber)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 0 20px var(--accent-amber-glow)';
+                }}
+              >
+                <ScanLine size={32} />
+              </button>
             </>
           ) : status === 'recording' ? (
-            <button 
+            <button
               onClick={stopRecording}
+              aria-label="Stop recording"
               style={{
                 width: '80px',
                 height: '80px',
@@ -380,6 +475,47 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         )}
       </div>
 
+      {/* No-key disclosure: explain up front that voice/photo/barcode need a key,
+          so users aren't surprised by an error only after tapping. Typing is free. */}
+      {!apiKey && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          padding: '0.6rem 0.9rem',
+          borderRadius: '12px',
+          background: 'rgba(139, 92, 246, 0.06)',
+          border: '1px solid var(--border-glass)',
+          color: 'var(--text-secondary)',
+          fontSize: '0.82rem',
+          lineHeight: 1.4
+        }}>
+          <Sparkles size={15} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>
+            Voice &amp; photo logging need a free Gemini key. Typing &amp; barcode scanning work right now.
+          </span>
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(139, 92, 246, 0.16)',
+                border: '1px solid var(--border-glass-glow)',
+                color: 'var(--accent-purple)',
+                borderRadius: '99px',
+                padding: '0.25rem 0.75rem',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Add key
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Text fallback input bar */}
       <form onSubmit={handleTextSubmit} style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
         <div style={{ position: 'relative', flex: 1 }}>
@@ -411,9 +547,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
             }}
           />
         </div>
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={status === 'processing' || !textInput.trim()}
+          aria-label="Log typed entry"
           className="btn btn-primary"
           style={{
             borderRadius: '16px',
@@ -428,6 +565,16 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           <Send size={18} />
         </button>
       </form>
+
+      {/* Web barcode scanner modal (native uses the ML Kit full-screen scanner instead) */}
+      <BarcodeScanner
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onResult={(code) => {
+          setScannerOpen(false);
+          resolveBarcode(code);
+        }}
+      />
 
     </div>
   );

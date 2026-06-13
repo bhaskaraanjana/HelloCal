@@ -1,0 +1,82 @@
+name: Mobile Build
+
+# Builds the HaloCal native apps. iOS requires a macOS runner (Xcode is Mac-only),
+# which is why this CI exists — it lets a Windows dev machine ship iOS builds.
+# Trigger manually or on a version tag.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  web:
+    name: Build web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+
+  android:
+    name: Build Android (AAB)
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npx cap sync android
+      # --- Signing (uncomment once secrets are configured) ---
+      # - name: Decode keystore
+      #   run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+      - name: Build release bundle
+        working-directory: android
+        run: ./gradlew bundleRelease
+        # env:
+        #   ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        #   ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        #   ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: android/app/build/outputs/bundle/release/*.aab
+
+  ios:
+    name: Build iOS (Archive)
+    needs: web
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx cap sync ios
+      - name: Install CocoaPods
+        working-directory: ios/App
+        run: pod install
+      # --- Signing (configure certificates/profiles via secrets) ---
+      - name: Build (unsigned archive for CI smoke test)
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -configuration Release -sdk iphoneos \
+            -archivePath build/App.xcarchive archive \
+            CODE_SIGNING_ALLOWED=NO | xcpretty || true

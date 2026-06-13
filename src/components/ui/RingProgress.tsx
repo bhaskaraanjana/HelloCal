@@ -24,6 +24,11 @@ export const RingProgress: React.FC<RingProgressProps> = ({
   const percentage = Math.min(Math.max(value / (max || 1), 0), 1);
   const strokeDashoffset = circumference - percentage * circumference;
 
+  // Over-budget state: shift the ring to a warning color and pulse it.
+  const isOver = value > (max || 1);
+  const ringColor = isOver ? 'var(--accent-rose)' : color;
+  const ringGlow = isOver ? 'var(--accent-rose-glow)' : glowColor;
+
   return (
     <div style={{ position: 'relative', width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }}>
@@ -42,15 +47,16 @@ export const RingProgress: React.FC<RingProgressProps> = ({
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke={color}
+          stroke={ringColor}
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           style={{
-            filter: `drop-shadow(0 0 6px ${glowColor})`,
+            filter: `drop-shadow(0 0 6px ${ringGlow})`,
             opacity: 0.8,
-            transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+            transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+            animation: isOver ? 'ringPulseWarning 1.6s ease-in-out infinite' : undefined
           }}
         />
         {/* Foreground Circle */}
@@ -59,7 +65,7 @@ export const RingProgress: React.FC<RingProgressProps> = ({
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke={color}
+          stroke={ringColor}
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}

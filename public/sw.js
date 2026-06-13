@@ -1,9 +1,12 @@
-const CACHE_NAME = 'halocal-cache-v2';
+const CACHE_NAME = 'halocal-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
+  '/offline.html',
   '/favicon.svg',
   '/favicon.png',
+  '/icon-192.png',
+  '/icon-512.png',
   '/icons.svg',
   '/manifest.json'
 ];
@@ -64,9 +67,13 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => {
-          // If offline, serve the cached index.html shell
-          return caches.match(event.request);
+        .catch(async () => {
+          // If offline, serve the cached version, then the cached shell, then the offline page.
+          return (
+            (await caches.match(event.request)) ||
+            (await caches.match('/index.html')) ||
+            (await caches.match('/offline.html'))
+          );
         })
     );
   } else {

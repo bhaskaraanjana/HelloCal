@@ -1,28 +1,36 @@
 import React, { useState } from 'react';
 import type { MealLog, WorkoutLog, UserGoals } from '../types/nutrition';
-import { 
-  Trash2, 
-  CalendarRange, 
-  Clock, 
-  Coffee, 
-  Sunset, 
-  Moon, 
-  Cookie, 
-  ChevronLeft, 
-  ChevronRight, 
-  CalendarDays, 
-  Activity
+import {
+  Trash2,
+  CalendarRange,
+  Clock,
+  Coffee,
+  Sunset,
+  Moon,
+  Cookie,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  Activity,
+  Pencil,
+  CopyPlus,
+  Mic,
+  Camera,
+  Keyboard
 } from 'lucide-react';
+import { EmptyState } from './ui/EmptyState';
 
 interface FoodTimelineProps {
   logs: MealLog[];
   workouts?: WorkoutLog[];
   onDeleteLog: (id: string) => void;
   onDeleteWorkout?: (id: string) => void;
+  onEditLog?: (log: MealLog) => void;
+  onCopyDay?: (dayStart: number) => void;
   goals?: UserGoals;
 }
 
-export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, goals }) => {
+export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, goals }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'feed'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -462,9 +470,35 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
           >
             {/* Header Totals */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500, fontFamily: 'var(--font-display)' }}>
-                {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500, fontFamily: 'var(--font-display)' }}>
+                  {selectedDate.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
+                </span>
+                {onCopyDay && dailyCals > 0 && !isSameDay(selectedDate.getTime(), new Date().getTime()) && (
+                  <button
+                    onClick={() => onCopyDay(selectedDate.getTime())}
+                    aria-label="Copy this day's meals to today"
+                    title="Copy meals to today"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      background: 'rgba(139, 92, 246, 0.08)',
+                      border: '1px solid rgba(139, 92, 246, 0.18)',
+                      color: 'var(--accent-purple)',
+                      borderRadius: '8px',
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.65rem',
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-display)',
+                      cursor: 'pointer',
+                      transition: 'var(--transition-smooth)'
+                    }}
+                  >
+                    <CopyPlus size={11} /> Copy to today
+                  </button>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.2rem' }}>
                 <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-purple)', fontFamily: 'var(--font-display)' }}>
                   {dailyCals}
@@ -545,32 +579,24 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
         {filteredTimeline.length === 0 ? (
           <div style={{
             textAlign: 'center',
-            padding: '3.5rem 1rem',
-            color: 'var(--text-muted)',
+            padding: '1rem',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '0.75rem'
+            gap: '0.5rem'
           }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '50%',
-              backgroundColor: 'rgba(255,255,255,0.015)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-muted)',
-              border: '1px solid var(--border-glass)'
-            }}>
-              <Activity size={24} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>No activity logged for this day</span>
-              <span style={{ fontSize: '0.8rem', maxWidth: '280px', margin: '0 auto', lineHeight: '1.4' }}>
-                {viewMode === 'calendar' ? 'Speak, upload a photo, or type your activity in the console above!' : 'Your activity history is currently clear.'}
-              </span>
-            </div>
+            <EmptyState
+              icon={<Activity size={26} />}
+              title="No activity logged for this day"
+              subtitle={viewMode === 'calendar'
+                ? 'Log your first meal or workout using the console above — by voice, photo, or text.'
+                : 'Your activity history is currently clear.'}
+              actions={viewMode === 'calendar' ? [
+                { icon: <Mic size={20} />, label: 'Voice', hint: '~5 sec' },
+                { icon: <Camera size={20} />, label: 'Photo', hint: '~3 sec' },
+                { icon: <Keyboard size={20} />, label: 'Type', hint: 'anytime' },
+              ] : undefined}
+            />
             {viewMode === 'calendar' && !isSameDay(selectedDate.getTime(), new Date().getTime()) && (
               <button 
                 onClick={() => {
@@ -660,11 +686,49 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                         </span>
                       </div>
                       
-                      <button 
+                      {onEditLog && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditLog(log);
+                          }}
+                          aria-label="Edit this meal"
+                          title="Edit meal"
+                          style={{
+                            background: 'rgba(139, 92, 246, 0.05)',
+                            border: '1px solid rgba(139, 92, 246, 0.1)',
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'var(--transition-smooth)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = 'var(--text-primary)';
+                            e.currentTarget.style.backgroundColor = 'var(--accent-purple)';
+                            e.currentTarget.style.borderColor = 'var(--accent-purple)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                            e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.05)';
+                            e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.1)';
+                          }}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onDeleteLog(log.id);
                         }}
+                        aria-label="Delete this meal"
+                        title="Delete meal"
                         style={{
                           background: 'rgba(244, 63, 94, 0.05)',
                           border: '1px solid rgba(244, 63, 94, 0.1)',

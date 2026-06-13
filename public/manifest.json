@@ -1,12 +1,18 @@
 {
   "name": "HaloCal - AI Voice Calorie Tracker",
   "short_name": "HaloCal",
-  "description": "Smart voice logging calorie and macro tracker",
+  "description": "Smart AI voice, photo & barcode calorie and macro tracker. Private & serverless.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
+  "lang": "en",
+  "dir": "ltr",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0a0b10",
   "theme_color": "#8b5cf6",
   "orientation": "portrait-primary",
+  "categories": ["health", "fitness", "lifestyle", "food"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -25,6 +31,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log a meal",
+      "short_name": "Log",
+      "description": "Jump straight to logging food by voice, photo, or text",
+      "url": "/?action=log",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "View analytics",
+      "short_name": "Analytics",
+      "description": "See your nutrition trends and weight progress",
+      "url": "/?tab=analytics",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
