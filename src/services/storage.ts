@@ -1,6 +1,7 @@
 import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement, HydrationLog, MealPreset } from '../types/nutrition';
 import type { CustomMicro } from '../types/nutrition';
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements, sanitizeHydrationLogs, sanitizeMealPresets, sanitizeCustomMicros } from './sanitize';
+import { clampGoal } from './validation';
 
 // Bump when the on-disk shape changes in a way that needs a migration step.
 // v2: rebrand HaloCal -> HelloCal migrated localStorage keys halocal_* -> hellocal_*.
@@ -155,15 +156,21 @@ export const storage = {
       }
 
       if (stored < 3) {
-        // Seed customMicros from legacy visibleMicros + goals (once).
+        // Seed customMicros from legacy visibleMicros + goals (once). Use safeParse
+        // so a corrupt settings/goals value is skipped rather than throwing — a throw
+        // here would be swallowed by the outer catch and the VERSION stamp below would
+        // never run, re-running this migration on every load forever.
         const sRaw = localStorage.getItem(KEYS.SETTINGS);
-        if (sRaw) {
-          const s = JSON.parse(sRaw);
-          if (!Array.isArray(s.customMicros) || s.customMicros.length === 0) {
+        const s = sRaw ? safeParse(sRaw) : null;
+        if (s && typeof s === 'object' && !Array.isArray(s)) {
+          const sObj = s as Record<string, unknown>;
+          if (!Array.isArray(sObj.customMicros) || sObj.customMicros.length === 0) {
             const gRaw = localStorage.getItem(KEYS.GOALS);
-            const g = gRaw ? JSON.parse(gRaw) : DEFAULT_GOALS;
-            s.customMicros = buildDefaultMicros(g, s.visibleMicros);
-            localStorage.setItem(KEYS.SETTINGS, JSON.stringify(s));
+            const gParsed = gRaw ? safeParse(gRaw) : null;
+            const g = (gParsed && typeof gParsed === 'object' ? gParsed : DEFAULT_GOALS) as UserGoals;
+            // Sanitize so a NaN/missing goal limit can't be persisted to disk.
+            sObj.customMicros = sanitizeCustomMicros(buildDefaultMicros(g, sObj.visibleMicros as { addedSugar?: boolean; fiber?: boolean; sodium?: boolean } | undefined));
+            localStorage.setItem(KEYS.SETTINGS, JSON.stringify(sObj));
           }
         }
       }
@@ -183,13 +190,29 @@ export const storage = {
       const coachRaw = localStorage.getItem(KEYS.COACH);
       const settingsRaw = localStorage.getItem(KEYS.SETTINGS);
 
-      let parsedGoals = goalsRaw ? JSON.parse(goalsRaw) : DEFAULT_GOALS;
-      if (parsedGoals.addedSugar === undefined) parsedGoals.addedSugar = DEFAULT_GOALS.addedSugar;
-      if (parsedGoals.fiber === undefined) parsedGoals.fiber = DEFAULT_GOALS.fiber;
-      if (parsedGoals.sodium === undefined) parsedGoals.sodium = DEFAULT_GOALS.sodium;
-      if (parsedGoals.waterTarget === undefined) parsedGoals.waterTarget = DEFAULT_GOALS.waterTarget;
+      // Goals: guard object-ness, then coerce every known numeric field to a finite,
+      // in-bounds value (falling back to the default). NaN/null/string goals would
+      // otherwise leak into the calorie/budget math and render as "NaN". clampGoal is
+      // the same guard the import + AI-customizer paths use.
+      const rawGoals = goalsRaw ? safeParse(goalsRaw) : null;
+      const parsedGoals = { ...DEFAULT_GOALS } as UserGoals;
+      if (rawGoals && typeof rawGoals === 'object' && !Array.isArray(rawGoals)) {
+        const g = rawGoals as Record<string, unknown>;
+        // null/'' read as "missing" (Number(null)===0 would otherwise clamp to the
+        // bound min instead of restoring the default).
+        const present = (v: unknown) => v !== undefined && v !== null && v !== '';
+        (Object.keys(DEFAULT_GOALS) as (keyof UserGoals)[]).forEach((k) => {
+          if (present(g[k])) parsedGoals[k] = clampGoal(k, Number(g[k]), DEFAULT_GOALS[k] as number);
+        });
+        // Preserve optional goals (iron/hydration) when present, clamped.
+        (['iron', 'hydration'] as (keyof UserGoals)[]).forEach((k) => {
+          if (present(g[k])) parsedGoals[k] = clampGoal(k, Number(g[k]), (DEFAULT_GOALS[k] as number) ?? 0);
+        });
+      }
 
-      let parsedSettings = settingsRaw ? JSON.parse(settingsRaw) : DEFAULT_SETTINGS;
+      // Settings: guard object-ness so a corrupt array/scalar can't spread garbage keys.
+      const rawSettings = settingsRaw ? safeParse(settingsRaw) : null;
+      let parsedSettings: any = (rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)) ? rawSettings : {};
       // Handle deep merging safely to handle progressive configuration structure updates
       parsedSettings = {
         ...DEFAULT_SETTINGS,
@@ -307,7 +330,21 @@ export const storage = {
   },
 
   clearAll(): void {
-    Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
+    // Remove the hellocal_* keys AND their legacy halocal_* counterparts. The v2
+    // migration copies legacy data forward but leaves the originals in place, so if
+    // we only cleared hellocal_* (including the VERSION key), the next mount would
+    // see no version, re-enter the rebrand copy branch, and resurrect the wiped data
+    // — a correctness and privacy bug. Re-stamp the version so migrate() is a no-op.
+    Object.values(KEYS).forEach((k) => {
+      localStorage.removeItem(k);
+      const legacy = k.replace('hellocal_', 'halocal_');
+      if (legacy !== k) localStorage.removeItem(legacy);
+    });
+    try {
+      localStorage.setItem(KEYS.VERSION, String(SCHEMA_VERSION));
+    } catch {
+      /* best-effort */
+    }
   }
 };
 

@@ -108,6 +108,55 @@ describe('migration backfill', () => {
     storage.migrate();
     expect(storage.getData().goals.calories).toBe(2200);
   });
+
+  it('migrate() still stamps the version when settings JSON is corrupt (no infinite re-migration)', () => {
+    localStorage.setItem('hellocal_schema_version', '2');
+    localStorage.setItem('hellocal_app_settings', '{bad json');
+    expect(() => storage.migrate()).not.toThrow();
+    expect(localStorage.getItem('hellocal_schema_version')).toBe('3');
+  });
+});
+
+describe('clearAll wipes data permanently (no resurrection)', () => {
+  it('removes legacy halocal_* keys and re-stamps the version so migrate() cannot resurrect data', () => {
+    // A user who was migrated from HaloCal still has legacy keys on disk.
+    localStorage.setItem('halocal_logs', JSON.stringify([{ id: 'm1', timestamp: 1, mealType: 'lunch', items: [{ id: 'i', name: 'Soup', quantity: '1', calories: 120, protein: 5, carbs: 10, fat: 3, confidence: 'high' }] }]));
+    storage.migrate(); // copies legacy -> hellocal_*, stamps version 3
+    expect(storage.getData().logs).toHaveLength(1);
+
+    storage.clearAll();
+    expect(localStorage.getItem('halocal_logs')).toBeNull();
+    expect(localStorage.getItem('hellocal_logs')).toBeNull();
+    expect(localStorage.getItem('hellocal_schema_version')).toBe('3');
+
+    // Simulate the next app mount: migrate() must be a no-op, not a resurrection.
+    storage.migrate();
+    expect(storage.getData().logs).toEqual([]);
+  });
+});
+
+describe('getData coerces corrupt goals/settings', () => {
+  it('coerces NaN/null/string goal values to finite, in-bounds numbers', () => {
+    localStorage.setItem('hellocal_goals', JSON.stringify({ calories: null, protein: 'abc', carbs: 200, fat: 60 }));
+    const goals = storage.getData().goals;
+    expect(Number.isFinite(goals.calories)).toBe(true);
+    expect(goals.calories).toBe(2000); // null -> default
+    expect(Number.isFinite(goals.protein)).toBe(true);
+    expect(goals.protein).toBe(130); // 'abc' -> default
+    expect(goals.carbs).toBe(200); // valid value preserved
+  });
+
+  it('clamps an absurd goal to its bound', () => {
+    localStorage.setItem('hellocal_goals', JSON.stringify({ calories: 999999 }));
+    expect(storage.getData().goals.calories).toBe(6000); // GOAL_BOUNDS.calories.max
+  });
+
+  it('falls back to default settings when the stored value is an array', () => {
+    localStorage.setItem('hellocal_app_settings', '[]');
+    const s = storage.getData().appSettings!;
+    expect(s.theme).toBe('obsidian');
+    expect(s.visibleWidgets).toBeDefined();
+  });
 });
 
 describe('quota / write failures', () => {
