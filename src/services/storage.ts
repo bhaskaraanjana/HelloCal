@@ -1,4 +1,8 @@
 import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from '../types/nutrition';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates } from './sanitize';
+
+// Bump when the on-disk shape changes in a way that needs a migration step.
+const SCHEMA_VERSION = 1;
 
 const KEYS = {
   LOGS: 'halocal_logs',
@@ -11,7 +15,8 @@ const KEYS = {
   BODY: 'halocal_body_metrics',
   FAVORITES: 'halocal_favorites',
   PROFILE: 'halocal_profile',
-  TEMPLATES: 'halocal_meal_templates'
+  TEMPLATES: 'halocal_meal_templates',
+  VERSION: 'halocal_schema_version'
 };
 
 const DEFAULT_GOALS: UserGoals = {
@@ -31,6 +36,25 @@ function readJSON<T>(key: string, fallback: T): T {
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
+  }
+}
+
+/** JSON.parse that returns null instead of throwing on malformed input. */
+function safeParse(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Decode the base64-obfuscated Gemini key, tolerating a corrupt value. */
+function decodeKey(raw: string | null): string {
+  if (!raw) return '';
+  try {
+    return atob(raw);
+  } catch {
+    return '';
   }
 }
 
@@ -88,6 +112,22 @@ export const storage = {
     errorHandler = fn;
   },
 
+  /**
+   * Apply any pending schema migrations and stamp the current version. Called
+   * once on app init. No migrations exist yet (v1 is the baseline); the framework
+   * is here so future on-disk changes have a clean, versioned upgrade path.
+   */
+  migrate(): void {
+    try {
+      const stored = Number(localStorage.getItem(KEYS.VERSION) || '0');
+      if (stored >= SCHEMA_VERSION) return;
+      // Future: switch on `stored` to transform older shapes here.
+      localStorage.setItem(KEYS.VERSION, String(SCHEMA_VERSION));
+    } catch {
+      /* ignore — versioning is best-effort */
+    }
+  },
+
   getData(): StorageData {
     try {
       const logsRaw = localStorage.getItem(KEYS.LOGS);
@@ -114,18 +154,20 @@ export const storage = {
         reminders: { ...DEFAULT_SETTINGS.reminders, ...(parsedSettings.reminders || {}) }
       };
 
+      // Defensively sanitize every collection on load so a corrupt/partial/
+      // hand-edited store degrades gracefully instead of poisoning the UI.
       return {
-        logs: logsRaw ? JSON.parse(logsRaw) : [],
-        workouts: workoutsRaw ? JSON.parse(workoutsRaw) : [],
+        logs: sanitizeMealLogs(logsRaw ? safeParse(logsRaw) : []),
+        workouts: sanitizeWorkouts(workoutsRaw ? safeParse(workoutsRaw) : []),
         goals: parsedGoals,
-        geminiKey: keyRaw ? atob(keyRaw) : '',
+        geminiKey: decodeKey(keyRaw),
         coachPersonality: (coachRaw as CoachPersonality) || 'encouraging',
         appSettings: parsedSettings,
         waterLogs: readJSON<WaterLog[]>(KEYS.WATER, []),
         bodyMetrics: readJSON<BodyMetric[]>(KEYS.BODY, []),
-        favorites: readJSON<FavoriteFood[]>(KEYS.FAVORITES, []),
+        favorites: sanitizeFavorites(readJSON<unknown>(KEYS.FAVORITES, [])),
         profile: readJSON<UserProfile>(KEYS.PROFILE, {}),
-        mealTemplates: readJSON<MealTemplate[]>(KEYS.TEMPLATES, [])
+        mealTemplates: sanitizeMealTemplates(readJSON<unknown>(KEYS.TEMPLATES, []))
       };
     } catch (e) {
       console.error('Error reading from localStorage', e);

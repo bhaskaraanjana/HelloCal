@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate } from './types/nutrition';
 import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
-import { clampGoal, GOAL_BOUNDS, coerceFoodItem } from './services/validation';
+import { clampGoal, GOAL_BOUNDS } from './services/validation';
+import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates } from './services/sanitize';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -145,6 +146,7 @@ export const App: React.FC = () => {
   // Initialize
   useEffect(() => {
     storage.setErrorHandler((msg) => triggerToast(msg));
+    storage.migrate();
     const data = storage.getData();
     setLogs(data.logs);
     setWorkouts(data.workouts || []);
@@ -545,39 +547,18 @@ export const App: React.FC = () => {
             importedGoals[k] = clampGoal(k, Number(parsed.goals[k]), goals[k] ?? GOAL_BOUNDS[k].min);
           }
         });
-        // Sanitize imported log items through the same coercion the AI path uses,
-        // so a hand-edited/corrupt backup can't persist NaN/garbage that then
-        // renders as "NaN" in the timeline. Drop items/logs that don't survive.
-        const validatedLogs: MealLog[] = (parsed.logs as any[])
-          .map((log) => ({
-            id: typeof log?.id === 'string' && log.id ? log.id : `meal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            timestamp: Number(log?.timestamp) || Date.now(),
-            mealType: ['breakfast', 'lunch', 'dinner', 'snack'].includes(log?.mealType) ? log.mealType : 'snack',
-            items: Array.isArray(log?.items)
-              ? log.items
-                  .map((it: any) => {
-                    const c = coerceFoodItem(it);
-                    return c
-                      ? { ...c, id: typeof it?.id === 'string' && it.id ? it.id : `item_${Date.now()}_${Math.random().toString(36).slice(2, 5)}` }
-                      : null;
-                  })
-                  .filter(Boolean)
-              : [],
-          }))
-          .filter((l) => l.items.length > 0) as MealLog[];
+        // Sanitize imported logs so a hand-edited/corrupt backup can't persist
+        // NaN/garbage that would render as "NaN" in the timeline.
+        const validatedLogs = sanitizeMealLogs(parsed.logs);
 
         storage.saveLogs(validatedLogs);
         storage.saveGoals(importedGoals);
         // Reflect imported logs/goals in the UI immediately (previously only persisted).
         setLogs(validatedLogs);
         setGoals(importedGoals);
-        if (parsed.workouts) {
-          storage.saveWorkouts(parsed.workouts);
-          setWorkouts(parsed.workouts);
-        } else {
-          storage.saveWorkouts([]);
-          setWorkouts([]);
-        }
+        const validatedWorkouts = sanitizeWorkouts(parsed.workouts);
+        storage.saveWorkouts(validatedWorkouts);
+        setWorkouts(validatedWorkouts);
         if (parsed.geminiKey) storage.saveGeminiKey(parsed.geminiKey);
         if (parsed.coachPersonality) storage.saveCoach(parsed.coachPersonality);
         if (parsed.appSettings) {
@@ -592,17 +573,19 @@ export const App: React.FC = () => {
           storage.saveBodyMetrics(parsed.bodyMetrics);
           setBodyMetrics(parsed.bodyMetrics);
         }
-        if (Array.isArray(parsed.favorites)) {
-          storage.saveFavorites(parsed.favorites);
-          setFavorites(parsed.favorites);
+        if (parsed.favorites != null) {
+          const validatedFavs = sanitizeFavorites(parsed.favorites);
+          storage.saveFavorites(validatedFavs);
+          setFavorites(validatedFavs);
         }
         if (parsed.profile) {
           storage.saveProfile(parsed.profile);
           setProfile(parsed.profile);
         }
-        if (Array.isArray(parsed.mealTemplates)) {
-          storage.saveMealTemplates(parsed.mealTemplates);
-          setMealTemplates(parsed.mealTemplates);
+        if (parsed.mealTemplates != null) {
+          const validatedTemplates = sanitizeMealTemplates(parsed.mealTemplates);
+          storage.saveMealTemplates(validatedTemplates);
+          setMealTemplates(validatedTemplates);
         }
         return true;
       }
