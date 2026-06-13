@@ -729,6 +729,12 @@ export const App: React.FC = () => {
   const streak = computeStreak(logs);
   const lifetimeDays = totalLoggedDays(logs);
 
+  // Today's already-logged calories (excluding any meal currently being edited,
+  // since the staged items will replace it) — powers the live budget in the modal.
+  const todayConsumedCalories = logs
+    .filter((l) => l.timestamp >= startOfToday && l.id !== editingLogId)
+    .reduce((s, l) => s + l.items.reduce((a, i) => a + (Number(i.calories) || 0), 0), 0);
+
   return (
     <div className="app-container">
       
@@ -878,6 +884,8 @@ export const App: React.FC = () => {
         coachingMessage={stagedCoaching}
         apiKey={geminiKey}
         personality={coachPersonality}
+        calorieGoal={goals.calories || 2000}
+        consumedToday={todayConsumedCalories}
       />
 
       {/* 5. Sleek Toast Notification Banner */}

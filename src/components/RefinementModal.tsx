@@ -14,6 +14,8 @@ interface RefinementModalProps {
   coachingMessage?: string;
   apiKey: string;
   personality: CoachPersonality;
+  calorieGoal?: number;
+  consumedToday?: number;
 }
 
 export const RefinementModal: React.FC<RefinementModalProps> = ({
@@ -25,7 +27,9 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   onSave,
   coachingMessage: initialCoaching,
   apiKey,
-  personality
+  personality,
+  calorieGoal,
+  consumedToday = 0
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
@@ -285,6 +289,10 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   };
 
   const totalCalories = items.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
+  // How much of the daily calorie budget remains if this log is saved as-is — lets
+  // the user decide before confirming, instead of discovering it on the dashboard.
+  const remainingAfterLog =
+    calorieGoal != null ? calorieGoal - (consumedToday + totalCalories) : null;
   const totalProtein = items.reduce((sum, item) => sum + (Number(item.protein) || 0), 0);
   const totalCarbs = items.reduce((sum, item) => sum + (Number(item.carbs) || 0), 0);
   const totalFat = items.reduce((sum, item) => sum + (Number(item.fat) || 0), 0);
@@ -738,6 +746,18 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                 <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-amber)' }}>{Math.round(totalFat)}g</span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>F</span>
               </div>
+              {remainingAfterLog != null && (
+                <span style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  marginTop: '0.1rem',
+                  color: remainingAfterLog < 0 ? 'var(--accent-rose)' : 'var(--text-secondary)'
+                }}>
+                  {remainingAfterLog >= 0
+                    ? `${Math.round(remainingAfterLog)} kcal left today after this`
+                    : `${Math.abs(Math.round(remainingAfterLog))} kcal over budget`}
+                </span>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>

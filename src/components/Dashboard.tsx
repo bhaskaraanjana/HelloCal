@@ -62,7 +62,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
         acc.consumedProtein += Number(item.protein) || 0;
         acc.consumedCarbs += Number(item.carbs) || 0;
         acc.consumedFat += Number(item.fat) || 0;
-        acc.consumedAddedSugar += Number(item.addedSugar) || Number(item.sugar) || 0;
+        // Only count added sugar against the added-sugar target. Falling back to
+        // total sugar (as the old code did) blew the target on natural fruit/dairy
+        // sugar and created false "over limit" alarms.
+        acc.consumedAddedSugar += Number(item.addedSugar) || 0;
         acc.consumedFiber += Number(item.fiber) || 0;
         acc.consumedSodium += Number(item.sodium) || 0;
       });

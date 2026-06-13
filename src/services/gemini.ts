@@ -35,6 +35,7 @@ You must handle three types of entries, which you will classify via the "type" f
 For Food Logging:
 You must estimate calories and macronutrients (protein, carbs, and fat in grams), as well as key micronutrients (sugar, addedSugar, and fiber in grams; sodium in milligrams) for each food item mentioned. If the portion size is ambiguous, make a smart, realistic estimate based on standard USDA serving sizes and note confidence as "guess" rather than "high".
 If sugar, addedSugar, fiber, or sodium are not present or negligible, set them to 0.
+"sugar" is TOTAL sugar; "addedSugar" is ONLY manufacturer/recipe-added sugar (table sugar, syrups, sweeteners). Naturally occurring sugar in whole fruit, plain milk, or plain yogurt is NOT added sugar — set addedSugar to 0 for those. addedSugar must never exceed total sugar.
 Sanity-check every estimate: calories should roughly equal protein*4 + carbs*4 + fat*9 (within ~20%). Never output negative numbers.
 
 For Workout Logging:
