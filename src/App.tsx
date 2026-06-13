@@ -4,6 +4,7 @@ import { storage } from './services/storage';
 import { computeStreak, totalLoggedDays } from './services/insights';
 import { clampGoal, GOAL_BOUNDS } from './services/validation';
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates } from './services/sanitize';
+import { scaleNutrients, autoMealSlot } from './services/logMath';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -42,29 +43,6 @@ const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = 
   { name: 'Egg', quantity: '1 large', calories: 78, protein: 6, carbs: 0.6, fat: 5 },
   { name: 'Greek Yogurt', quantity: '170 g', calories: 100, protein: 17, carbs: 6, fat: 0.7 },
 ];
-
-// The meal slot HaloCal auto-assigns from the current local time.
-function autoMealSlot(): MealLog['mealType'] {
-  const hour = new Date().getHours();
-  if (hour >= 4 && hour < 11) return 'breakfast';
-  if (hour >= 11 && hour < 16) return 'lunch';
-  if (hour >= 17 && hour < 22) return 'dinner';
-  return 'snack';
-}
-
-// Scale every numeric nutrient field of a logged item by a factor, preserving id.
-const SCALE_KEYS: (keyof FoodItem)[] = ['calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium'];
-function scaleFoodItem(item: FoodItem, factor: number): FoodItem {
-  const out: FoodItem = { ...item };
-  for (const k of SCALE_KEYS) {
-    const v = out[k];
-    if (typeof v === 'number') {
-      const scaled = v * factor;
-      (out as unknown as Record<string, number>)[k] = k === 'calories' || k === 'sodium' ? Math.round(scaled) : Math.round(scaled * 10) / 10;
-    }
-  }
-  return out;
-}
 
 const NAV_TABS = [
   { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
@@ -470,7 +448,7 @@ export const App: React.FC = () => {
   // Inline portion adjust from the timeline — scale one logged item in place.
   const handleScaleItem = (logId: string, itemId: string, factor: number) => {
     const updated = logs.map((l) =>
-      l.id !== logId ? l : { ...l, items: l.items.map((it) => (it.id === itemId ? scaleFoodItem(it, factor) : it)) }
+      l.id !== logId ? l : { ...l, items: l.items.map((it) => (it.id === itemId ? scaleNutrients(it, factor) : it)) }
     );
     setLogs(updated);
     storage.saveLogs(updated);

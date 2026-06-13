@@ -4,6 +4,7 @@ import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
 import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle, Bookmark } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { scaleNutrients } from '../services/logMath';
 
 interface RefinementModalProps {
   isOpen: boolean;
@@ -160,25 +161,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
     setItems(items.filter((_, i) => i !== index));
   };
 
-  // Scale every nutrient field of an item by a factor (calories/sodium are whole
-  // numbers, the rest keep one decimal). Used by both the quick-scale buttons and
-  // the offline portion-correction command so no nutrient is silently left behind.
-  const NUTRIENT_FIELDS: (keyof Omit<FoodItem, 'id'>)[] = [
-    'calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium',
-  ];
-  const scaleNutrients = (item: Omit<FoodItem, 'id'>, factor: number): Omit<FoodItem, 'id'> => {
-    const out: Omit<FoodItem, 'id'> = { ...item };
-    for (const k of NUTRIENT_FIELDS) {
-      const v = out[k];
-      if (typeof v === 'number') {
-        const scaled = v * factor;
-        (out as Record<string, unknown>)[k] =
-          k === 'calories' || k === 'sodium' ? Math.round(scaled) : Math.round(scaled * 10) / 10;
-      }
-    }
-    return out;
-  };
-
+  // Quick-scale + offline portion correction share scaleNutrients (services/logMath)
+  // so calories/sodium round to integers and no nutrient is silently left behind.
   const applyQuickScale = (index: number, factor: number) => {
     setItems(items.map((it, i) => (i === index ? scaleNutrients(it, factor) : it)));
   };
