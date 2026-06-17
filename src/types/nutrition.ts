@@ -126,6 +126,7 @@ export interface AppSettings {
     supplements?: boolean;
   };
   reminders?: MealReminders;
+  supplementReminders?: SupplementReminders;
   // Per-panel display options (ultra-customisable dashboard panels)
   showBurnBreakdown?: boolean;   // calorieHalo: show "Base + Burn" subline
   showMealBreakdown?: boolean;   // mealSlots: show B/L/D/S chips
@@ -150,6 +151,14 @@ export interface MealReminders {
   breakfast: string; // "HH:MM" 24h local time
   lunch: string;
   dinner: string;
+  snack: string;
+}
+
+export interface SupplementReminders {
+  enabled: boolean;
+  morning: string;   // "HH:MM" 24h local time
+  lunch: string;
+  bedtime: string;
 }
 
 export interface CommandResponse {

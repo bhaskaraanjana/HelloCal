@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import type { MealReminders } from '../types/nutrition';
+import type { MealReminders, SupplementReminders, Supplement } from '../types/nutrition';
 
 export const isNative = (): boolean => Capacitor.isNativePlatform();
 export const getPlatform = (): string => Capacitor.getPlatform();
@@ -99,12 +99,13 @@ export async function shareText(title: string, text: string, filename = 'helloca
 
 // ----- Meal reminders -----
 
-type ReminderDef = { id: number; slot: 'breakfast' | 'lunch' | 'dinner'; time: string; title: string; body: string };
+type ReminderDef = { id: number; slot: 'breakfast' | 'lunch' | 'dinner' | 'snack'; time: string; title: string; body: string };
 
 const reminderDefs = (r: MealReminders): ReminderDef[] => [
   { id: 1, slot: 'breakfast', time: r.breakfast, title: '🍳 Breakfast time', body: 'Log your breakfast in HelloCal to stay on your halo.' },
   { id: 2, slot: 'lunch', time: r.lunch, title: '🥗 Lunch check-in', body: 'Got a minute? Log your lunch in HelloCal.' },
   { id: 3, slot: 'dinner', time: r.dinner, title: '🍱 Dinner time', body: 'Round out your day — log dinner in HelloCal.' },
+  { id: 4, slot: 'snack', time: r.snack, title: '🍎 Snack check-in', body: 'Quick energy boost? Log your snack in HelloCal.' },
 ];
 
 export const parseHM = (hm: string): { hour: number; minute: number } | null => {
@@ -168,6 +169,53 @@ export async function scheduleMealReminders(reminders: MealReminders): Promise<v
     }
   } catch (e) {
     console.warn('scheduleMealReminders failed', e);
+  }
+}
+
+/**
+ * Schedule (or clear) daily supplement reminders. Native only — uses repeating local
+ * notifications. On web this is a no-op; the app fires best-effort foreground nudges instead.
+ */
+export async function scheduleSupplementReminders(reminders: SupplementReminders, supplements: Supplement[]): Promise<void> {
+  if (!isNative()) return;
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    // Always clear the prior supplement-reminder set first (ids 11, 12, 13).
+    await LocalNotifications.cancel({ notifications: [{ id: 11 }, { id: 12 }, { id: 13 }] });
+    if (!reminders.enabled) return;
+    const perm = await LocalNotifications.requestPermissions();
+    if (perm.display !== 'granted') return;
+    
+    const slots: { id: number; key: 'morning' | 'lunch' | 'bedtime'; label: string; time: string }[] = [
+      { id: 11, key: 'morning', label: 'Morning', time: reminders.morning },
+      { id: 12, key: 'lunch', label: 'Lunch', time: reminders.lunch },
+      { id: 13, key: 'bedtime', label: 'Bedtime', time: reminders.bedtime },
+    ];
+    
+    const toSchedule = slots
+      .map((slot) => {
+        const hm = parseHM(slot.time);
+        if (!hm) return null;
+        
+        const inSlot = supplements.filter((s) => s.schedule.toLowerCase() === slot.key);
+        if (inSlot.length === 0) return null;
+        
+        const suppListStr = inSlot.map((s) => s.name + (s.dosage ? ` (${s.dosage})` : '')).join(', ');
+        
+        return {
+          id: slot.id,
+          title: `💊 Time for your ${slot.label} Supplements`,
+          body: `Take: ${suppListStr}`,
+          schedule: { on: { hour: hm.hour, minute: hm.minute }, allowWhileIdle: true, repeats: true },
+        };
+      })
+      .filter(Boolean);
+      
+    if (toSchedule.length) {
+      await LocalNotifications.schedule({ notifications: toSchedule as never });
+    }
+  } catch (e) {
+    console.warn('scheduleSupplementReminders failed', e);
   }
 }
 

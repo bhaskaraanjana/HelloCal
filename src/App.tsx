@@ -7,7 +7,7 @@ import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemp
 import { SupplementTracker } from './components/SupplementTracker';
 import { scaleNutrients, autoMealSlot } from './services/logMath';
 import { isSupabaseConfigured, getCurrentUser, onAuthChange, signIn as cloudSignIn, signUp as cloudSignUp, signOut as cloudSignOut, pushData as cloudPush, pullData as cloudPull, type CloudUser } from './services/cloudSync';
-import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
+import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, scheduleSupplementReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
 import { FoodTimeline } from './components/FoodTimeline';
@@ -32,7 +32,6 @@ import { Onboarding } from './components/Onboarding';
 import { InstallPrompt } from './components/InstallPrompt';
 import { FoodSearchDrawer } from './components/FoodSearchDrawer';
 import { MealTemplateBar } from './components/MealTemplateBar';
-import { RecentsTab } from './components/RecentsTab';
 // RecipeBox is large + AI-driven; lazy-load it so it stays out of the initial bundle.
 const RecipeBox = React.lazy(() =>
   import('./components/RecipeBox').then((m) => ({ default: m.RecipeBox }))
@@ -53,7 +52,6 @@ const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = 
 const NAV_TABS = [
   { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { key: 'timeline', label: 'Timeline', Icon: Utensils },
-  { key: 'recents', label: 'Recents', Icon: History },
   { key: 'recipes', label: 'Recipes', Icon: BookOpen },
   { key: 'analytics', label: 'Analytics', Icon: BarChart2 },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon },
@@ -93,7 +91,7 @@ export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Tab View
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'recents' | 'recipes' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'recipes' | 'analytics' | 'settings'>('dashboard');
 
   // Refinement modal states
   const [refinementOpen, setRefinementOpen] = useState(false);
@@ -181,7 +179,7 @@ export const App: React.FC = () => {
     try {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab === 'analytics' || tab === 'timeline' || tab === 'recents' || tab === 'recipes' || tab === 'settings' || tab === 'dashboard') {
+      if (tab === 'analytics' || tab === 'timeline' || tab === 'recipes' || tab === 'settings' || tab === 'dashboard') {
         setActiveTab(tab);
       }
     } catch {
@@ -216,6 +214,7 @@ export const App: React.FC = () => {
       ['breakfast', reminders.breakfast, '🍳 Breakfast time'],
       ['lunch', reminders.lunch, '🥗 Lunch check-in'],
       ['dinner', reminders.dinner, '🍱 Dinner time'],
+      ['snack', reminders.snack || '16:00', '🍎 Snack check-in'],
     ];
     const tick = () => {
       const now = new Date();
@@ -238,6 +237,49 @@ export const App: React.FC = () => {
     const interval = setInterval(tick, 60000);
     return () => clearInterval(interval);
   }, [appSettings.reminders]);
+
+  // Supplement reminders: native schedules repeating local notifications; web fires
+  // best-effort foreground nudges (only while the app is open).
+  useEffect(() => {
+    const reminders = appSettings.supplementReminders;
+    if (!reminders?.enabled) return;
+    if (isNative()) {
+      scheduleSupplementReminders(reminders, supplements);
+      return;
+    }
+    const tick = () => {
+      const now = new Date();
+      const dayKey = `hellocal_supp_reminded_${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      let fired: Record<string, boolean> = {};
+      try { fired = JSON.parse(localStorage.getItem(dayKey) || '{}'); } catch { fired = {}; }
+      
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      
+      const slots: { key: 'morning' | 'lunch' | 'bedtime'; label: string; time: string }[] = [
+        { key: 'morning', label: 'Morning', time: reminders.morning },
+        { key: 'lunch', label: 'Lunch', time: reminders.lunch },
+        { key: 'bedtime', label: 'Bedtime', time: reminders.bedtime },
+      ];
+      
+      for (const slot of slots) {
+        const hm = parseHM(slot.time);
+        if (!hm) continue;
+        const elapsed = nowMin - (hm.hour * 60 + hm.minute);
+        if (!fired[slot.key] && elapsed >= 0 && elapsed <= 90) {
+          const inSlot = supplements.filter((s) => s.schedule.toLowerCase() === slot.key);
+          if (inSlot.length > 0) {
+            const suppListStr = inSlot.map((s) => s.name + (s.dosage ? ` (${s.dosage})` : '')).join(', ');
+            showLocalNotification(`💊 Time for your ${slot.label} Supplements`, `Take: ${suppListStr}`);
+            fired[slot.key] = true;
+            try { localStorage.setItem(dayKey, JSON.stringify(fired)); } catch { /* ignore */ }
+          }
+        }
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 60000);
+    return () => clearInterval(interval);
+  }, [appSettings.supplementReminders, supplements]);
 
   // State Updates & Persistence
   const handleSaveGoals = (newGoals: UserGoals) => {
@@ -1004,6 +1046,23 @@ export const App: React.FC = () => {
     scheduleMealReminders(reminders); // native schedules; web is a no-op
   };
 
+  const handleSaveSupplementReminders = async (supplementReminders: import('./types/nutrition').SupplementReminders) => {
+    const next = { ...appSettings, supplementReminders };
+    setAppSettings(next);
+    storage.saveAppSettings(next);
+    if (supplementReminders.enabled) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        triggerToast('Enable notifications in your device settings to receive reminders.');
+      } else {
+        triggerToast('Supplement reminders saved. 🔔');
+      }
+    } else {
+      triggerToast('Supplement reminders turned off.');
+    }
+    // The native scheduling sync is handled by the useEffect above
+  };
+
   const handleTriggerCustomize = (scope: 'general' | 'macronutrients' | 'micronutrients' | 'widgets') => {
     setCustomizerScope(scope);
     setCustomizerOpen(true);
@@ -1190,17 +1249,6 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'recents' && (
-          <div role="tabpanel" id="panel-recents" aria-labelledby="tab-recents">
-            <RecentsTab
-              favorites={favorites}
-              onQuickLog={handleQuickLog}
-              onTogglePin={handleTogglePin}
-              onDelete={handleDeleteFavorite}
-            />
-          </div>
-        )}
-
         {activeTab === 'recipes' && (
           <div role="tabpanel" id="panel-recipes" aria-labelledby="tab-recipes">
             <Suspense fallback={
@@ -1251,6 +1299,8 @@ export const App: React.FC = () => {
               exportDataJson={backupJsonString}
               reminders={appSettings.reminders}
               onSaveReminders={handleSaveReminders}
+              supplementReminders={appSettings.supplementReminders}
+              onSaveSupplementReminders={handleSaveSupplementReminders}
               cloudConfigured={isSupabaseConfigured()}
               cloudUser={cloudUser ? { email: cloudUser.email } : null}
               onCloudSignIn={handleCloudSignIn}

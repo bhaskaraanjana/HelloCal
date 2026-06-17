@@ -84,6 +84,9 @@ describe('migration backfill', () => {
     const s = storage.getData().appSettings!;
     expect(s.reminders).toBeDefined();
     expect(s.reminders!.enabled).toBe(false);
+    expect(s.reminders!.snack).toBe('16:00');
+    expect(s.supplementReminders).toBeDefined();
+    expect(s.supplementReminders!.enabled).toBe(false);
     expect(s.theme).toBe('ocean');
   });
 

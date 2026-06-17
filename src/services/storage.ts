@@ -120,7 +120,14 @@ const DEFAULT_SETTINGS: AppSettings = {
     enabled: false,
     breakfast: '08:00',
     lunch: '12:30',
-    dinner: '18:30'
+    dinner: '18:30',
+    snack: '16:00'
+  },
+  supplementReminders: {
+    enabled: false,
+    morning: '08:00',
+    lunch: '12:30',
+    bedtime: '21:30'
   },
   showBurnBreakdown: true,
   showMealBreakdown: true,
@@ -220,7 +227,8 @@ export const storage = {
         visibleMacros: { ...DEFAULT_SETTINGS.visibleMacros, ...(parsedSettings.visibleMacros || {}) },
         visibleMicros: { ...DEFAULT_SETTINGS.visibleMicros, ...(parsedSettings.visibleMicros || {}) },
         visibleWidgets: { ...DEFAULT_SETTINGS.visibleWidgets, ...(parsedSettings.visibleWidgets || {}) },
-        reminders: { ...DEFAULT_SETTINGS.reminders, ...(parsedSettings.reminders || {}) }
+        reminders: { ...DEFAULT_SETTINGS.reminders, ...(parsedSettings.reminders || {}) },
+        supplementReminders: { ...DEFAULT_SETTINGS.supplementReminders, ...(parsedSettings.supplementReminders || {}) }
       };
       // customMicros is an array — assign wholesale (never spread-merge), seeding
       // data-backed defaults when absent so the micro HUD shows real intake.

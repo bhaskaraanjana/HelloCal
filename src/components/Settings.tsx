@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import type { UserGoals, CoachPersonality, MealReminders } from '../types/nutrition';
+import type { UserGoals, CoachPersonality, MealReminders, SupplementReminders } from '../types/nutrition';
 import { clampGoal } from '../services/validation';
 import { shareText, isNative } from '../services/native';
-import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload, Bell, Cloud, CloudUpload, CloudDownload, LogOut } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload, Bell, Cloud, CloudUpload, CloudDownload, LogOut, Pill } from 'lucide-react';
 
 interface SettingsProps {
   apiKey: string;
@@ -16,6 +16,8 @@ interface SettingsProps {
   exportDataJson: string;
   reminders?: MealReminders;
   onSaveReminders?: (r: MealReminders) => void;
+  supplementReminders?: SupplementReminders;
+  onSaveSupplementReminders?: (r: SupplementReminders) => void;
   cloudConfigured?: boolean;
   cloudUser?: { email: string | null } | null;
   onCloudSignIn?: (email: string, password: string) => void | Promise<void>;
@@ -37,6 +39,8 @@ export const Settings: React.FC<SettingsProps> = ({
   exportDataJson,
   reminders,
   onSaveReminders,
+  supplementReminders,
+  onSaveSupplementReminders,
   cloudConfigured,
   cloudUser,
   onCloudSignIn,
@@ -53,16 +57,29 @@ export const Settings: React.FC<SettingsProps> = ({
     setCloudBusy(true);
     try { await fn(); } finally { setCloudBusy(false); }
   };
-  const rem: MealReminders = reminders || { enabled: false, breakfast: '08:00', lunch: '12:30', dinner: '18:30' };
+  const rem: MealReminders = reminders || { enabled: false, breakfast: '08:00', lunch: '12:30', dinner: '18:30', snack: '16:00' };
   const [remEnabled, setRemEnabled] = useState(rem.enabled);
   const [remBreakfast, setRemBreakfast] = useState(rem.breakfast);
   const [remLunch, setRemLunch] = useState(rem.lunch);
   const [remDinner, setRemDinner] = useState(rem.dinner);
+  const [remSnack, setRemSnack] = useState(rem.snack || '16:00');
 
   const handleSaveReminders = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveReminders?.({ enabled: remEnabled, breakfast: remBreakfast, lunch: remLunch, dinner: remDinner });
+    onSaveReminders?.({ enabled: remEnabled, breakfast: remBreakfast, lunch: remLunch, dinner: remDinner, snack: remSnack });
     triggerSaveStatus('reminders');
+  };
+
+  const suppRem: SupplementReminders = supplementReminders || { enabled: false, morning: '08:00', lunch: '12:30', bedtime: '21:30' };
+  const [suppRemEnabled, setSuppRemEnabled] = useState(suppRem.enabled);
+  const [suppRemMorning, setSuppRemMorning] = useState(suppRem.morning);
+  const [suppRemLunch, setSuppRemLunch] = useState(suppRem.lunch);
+  const [suppRemBedtime, setSuppRemBedtime] = useState(suppRem.bedtime);
+
+  const handleSaveSupplementReminders = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSaveSupplementReminders?.({ enabled: suppRemEnabled, morning: suppRemMorning, lunch: suppRemLunch, bedtime: suppRemBedtime });
+    triggerSaveStatus('supplementReminders');
   };
   const [keyInput, setKeyInput] = useState(apiKey);
   const [showKey, setShowKey] = useState(false);
@@ -491,49 +508,94 @@ export const Settings: React.FC<SettingsProps> = ({
         )}
       </div>
 
-      {/* 3.5 Meal Reminders */}
+      {/* 3.5 Notifications & Reminders */}
       <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Bell size={18} color="var(--accent-purple)" /> Meal Reminders
+          <Bell size={18} color="var(--accent-purple)" /> Notifications & Reminders
         </h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-          Gentle daily nudges to log your meals.{!isNative() && ' On the web, reminders fire only while HelloCal is open in a tab — install the app for true background reminders.'}
+          Gentle daily nudges to log your meals and take your supplements.{!isNative() && ' On the web, reminders fire only while HelloCal is open in a tab — install the app for true background reminders.'}
         </p>
-        <form onSubmit={handleSaveReminders} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-            <input
-              type="checkbox"
-              checked={remEnabled}
-              onChange={(e) => setRemEnabled(e.target.checked)}
-              style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
-            />
-            Enable meal reminders
-          </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.85rem', opacity: remEnabled ? 1 : 0.5 }}>
-            {([
-              ['Breakfast', remBreakfast, setRemBreakfast],
-              ['Lunch', remLunch, setRemLunch],
-              ['Dinner', remDinner, setRemDinner],
-            ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
-              <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{label}</label>
-                <input
-                  type="time"
-                  value={value}
-                  disabled={!remEnabled}
-                  onChange={(e) => setter(e.target.value)}
-                  aria-label={`${label} reminder time`}
-                  style={{ padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
-                />
-              </div>
-            ))}
-          </div>
+        {/* Meal Reminders Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <form onSubmit={handleSaveReminders} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+              <input
+                type="checkbox"
+                checked={remEnabled}
+                onChange={(e) => setRemEnabled(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
+              />
+              Enable meal reminders
+            </label>
 
-          <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}>
-            {saveStatus['reminders'] ? 'Reminders Saved!' : 'Save Reminders'}
-          </button>
-        </form>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.85rem', opacity: remEnabled ? 1 : 0.5 }}>
+              {([
+                ['Breakfast', remBreakfast, setRemBreakfast],
+                ['Lunch', remLunch, setRemLunch],
+                ['Snack', remSnack, setRemSnack],
+                ['Dinner', remDinner, setRemDinner],
+              ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
+                <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{label}</label>
+                  <input
+                    type="time"
+                    value={value}
+                    disabled={!remEnabled}
+                    onChange={(e) => setter(e.target.value)}
+                    aria-label={`${label} reminder time`}
+                    style={{ padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}>
+              {saveStatus['reminders'] ? 'Meal Reminders Saved!' : 'Save Meal Reminders'}
+            </button>
+          </form>
+        </div>
+
+        {/* Supplement Reminders Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form onSubmit={handleSaveSupplementReminders} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+              <input
+                type="checkbox"
+                checked={suppRemEnabled}
+                onChange={(e) => setSuppRemEnabled(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
+              />
+              <Pill size={16} color={suppRemEnabled ? 'var(--accent-purple)' : 'var(--text-muted)'} />
+              Enable supplement reminders
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.85rem', opacity: suppRemEnabled ? 1 : 0.5 }}>
+              {([
+                ['Morning', suppRemMorning, setSuppRemMorning],
+                ['Lunch', suppRemLunch, setSuppRemLunch],
+                ['Bedtime', suppRemBedtime, setSuppRemBedtime],
+              ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
+                <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{label}</label>
+                  <input
+                    type="time"
+                    value={value}
+                    disabled={!suppRemEnabled}
+                    onChange={(e) => setter(e.target.value)}
+                    aria-label={`${label} supplement reminder time`}
+                    style={{ padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}>
+              {saveStatus['supplementReminders'] ? 'Supplement Reminders Saved!' : 'Save Supplement Reminders'}
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* 4. Data Center */}
