@@ -1,6 +1,6 @@
 name: Mobile Build
 
-# Builds the HaloCal native apps. iOS requires a macOS runner (Xcode is Mac-only),
+# Builds the HelloCal native apps. iOS requires a macOS runner (Xcode is Mac-only),
 # which is why this CI exists — it lets a Windows dev machine ship iOS builds.
 # Trigger manually or on a version tag.
 on:

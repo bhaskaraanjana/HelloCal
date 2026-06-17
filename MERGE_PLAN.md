@@ -2,7 +2,7 @@
 
 Base decision: **OURS** (HelloCal). Ours owns the engineering core (131 tests, native
 Capacitor, sanitize-on-load, schema migrations, error boundary, lazy Chart.js).
-Upstream (`bhaskaraanjana/Halo-Cal`, cloned at `C:\DEV\halo-cal-upstream`) is more
+Upstream (`bhaskaraanjana/HelloCal`, cloned at `C:\DEV\halo-cal-upstream`) is more
 feature-rich; its standout pieces are additive modules we graft onto ours.
 
 Branch: `merge-upstream`.
