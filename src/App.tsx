@@ -17,7 +17,7 @@ const Analytics = React.lazy(() =>
 );
 import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
-import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, History, BookOpen } from 'lucide-react';
+import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, BookOpen } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
 import { HydrationTracker } from './components/HydrationTracker';
@@ -856,11 +856,7 @@ export const App: React.FC = () => {
     storage.saveFavorites(updated);
   };
 
-  const handleDeleteFavorite = (id: string) => {
-    const updated = favorites.filter((f) => f.id !== id);
-    setFavorites(updated);
-    storage.saveFavorites(updated);
-  };
+
 
   // --- Meal presets / templates ---
   const handleSaveTemplate = (name: string, items: Omit<FoodItem, 'id'>[]) => {
