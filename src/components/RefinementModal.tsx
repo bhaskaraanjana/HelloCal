@@ -70,6 +70,32 @@ const clearDraft = () => {
   try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
 };
 
+interface MicroFieldConfig {
+  key: keyof FoodItem;
+  label: string;
+  unit: string;
+  color: string;
+  bg: string;
+  integer?: boolean;
+}
+
+const ADDITIONAL_MICROS: MicroFieldConfig[] = [
+  { key: 'sugar', label: 'Sugar', unit: 'g', color: 'var(--accent-rose)', bg: 'rgba(244,63,94,0.03)' },
+  { key: 'saturatedFat', label: 'Sat Fat', unit: 'g', color: 'var(--accent-amber)', bg: 'rgba(245,158,11,0.03)' },
+  { key: 'transFat', label: 'Trans Fat', unit: 'g', color: 'var(--accent-amber)', bg: 'rgba(245,158,11,0.03)' },
+  { key: 'iron', label: 'Iron', unit: 'mg', color: 'var(--accent-purple)', bg: 'rgba(139,92,246,0.03)' },
+  { key: 'calcium', label: 'Calcium', unit: 'mg', color: 'var(--accent-teal)', bg: 'rgba(16,185,129,0.03)', integer: true },
+  { key: 'potassium', label: 'Potassium', unit: 'mg', color: 'var(--accent-blue)', bg: 'rgba(59,130,246,0.03)', integer: true },
+  { key: 'cholesterol', label: 'Cholest', unit: 'mg', color: 'var(--accent-rose)', bg: 'rgba(244,63,94,0.03)', integer: true },
+  { key: 'vitaminA', label: 'Vit A', unit: 'mcg', color: 'var(--accent-teal)', bg: 'rgba(16,185,129,0.03)' },
+  { key: 'vitaminC', label: 'Vit C', unit: 'mg', color: 'var(--accent-amber)', bg: 'rgba(245,158,11,0.03)' },
+  { key: 'vitaminD', label: 'Vit D', unit: 'mcg', color: 'var(--accent-blue)', bg: 'rgba(59,130,246,0.03)' },
+  { key: 'vitaminB12', label: 'Vit B12', unit: 'mcg', color: 'var(--accent-purple)', bg: 'rgba(139,92,246,0.03)' },
+  { key: 'zinc', label: 'Zinc', unit: 'mg', color: 'var(--accent-teal)', bg: 'rgba(16,185,129,0.03)' },
+  { key: 'magnesium', label: 'Magnes', unit: 'mg', color: 'var(--accent-blue)', bg: 'rgba(59,130,246,0.03)', integer: true },
+  { key: 'folate', label: 'Folate', unit: 'mcg', color: 'var(--accent-purple)', bg: 'rgba(139,92,246,0.03)' }
+];
+
 export const RefinementModal: React.FC<RefinementModalProps> = ({
   isOpen,
   onClose,
@@ -89,6 +115,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   initialTimestamp
 }) => {
   const [items, setItems] = useState<Omit<FoodItem, 'id'>[]>([]);
+  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+  const [newMicroInputs, setNewMicroInputs] = useState<Record<number, { name: string; val: string; unit: string }>>({});
   const [workout, setWorkout] = useState<Omit<WorkoutLog, 'id'> | null>(null);
   const [coaching, setCoaching] = useState('');
   const [modalLogType, setModalLogType] = useState<'food' | 'workout' | 'mixed'>('food');
@@ -166,10 +194,16 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
 
   const handleUpdateField = (index: number, field: keyof Omit<FoodItem, 'id'>, value: any) => {
     const updated = [...items];
-    updated[index] = {
+    const nextItem = {
       ...updated[index],
       [field]: value
     };
+    if (field === 'sugar' && nextItem.addedSugar !== undefined && nextItem.addedSugar > value) {
+      nextItem.addedSugar = value;
+    } else if (field === 'addedSugar' && nextItem.sugar !== undefined && value > nextItem.sugar) {
+      nextItem.sugar = value;
+    }
+    updated[index] = nextItem;
     setItems(updated);
   };
 
@@ -454,8 +488,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
             <Sparkles size={18} color="var(--accent-purple)" />
             Review & Refine Log
           </h2>
-          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
-            <X size={16} />
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={18} />
           </button>
         </div>
 
@@ -596,7 +630,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                   value={logTime}
                   onChange={(e) => setLogTime(e.target.value)}
                   aria-label="Log date and time (leave blank for now)"
-                  style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '0.3rem 0.55rem', color: 'var(--text-primary)', fontSize: '0.78rem', outline: 'none' }}
+                  style={{ background: 'var(--bg-glass-light)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', padding: '0.3rem 0.55rem', color: 'var(--text-primary)', fontSize: '0.78rem', outline: 'none' }}
                 />
                 {logTime ? (
                   <button type="button" onClick={() => setLogTime('')} style={{ padding: '0.3rem 0.6rem', borderRadius: '99px', fontSize: '0.72rem', fontWeight: 600, background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer' }}>Now</button>
@@ -762,6 +796,186 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Expandable Extra Micronutrients section */}
+                    <div style={{ marginTop: '0.4rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedItems(prev => ({ ...prev, [index]: !prev[index] }))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          padding: '0.2rem 0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          fontFamily: 'var(--font-display)',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        {expandedItems[index] ? 'Hide extra micronutrients ▲' : 'Show extra micronutrients ▼'}
+                      </button>
+
+                      {expandedItems[index] && (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(3, 1fr)',
+                          gap: '0.4rem',
+                            borderTop: '1px dashed var(--border-glass)',
+                          paddingTop: '0.5rem'
+                        }}>
+                          {ADDITIONAL_MICROS.map((micro) => {
+                            const val = (item as any)[micro.key] !== undefined ? (item as any)[micro.key] : 0;
+                            return (
+                              <div key={micro.key} style={{ display: 'flex', alignItems: 'center', background: micro.bg, borderRadius: '8px', padding: '0.25rem' }}>
+                                <span style={{ fontSize: '0.62rem', color: micro.color, marginRight: '0.25rem', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>
+                                  {micro.label}({micro.unit})
+                                </span>
+                                <input
+                                  type="number"
+                                  value={val}
+                                  onChange={(e) => {
+                                    const parsed = micro.integer ? parseInt(e.target.value) : parseFloat(e.target.value);
+                                    handleUpdateField(index, micro.key as any, parsed || 0);
+                                  }}
+                                  style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                                />
+                              </div>
+                            );
+                          })}
+
+                          {item.micros && Object.keys(item.micros).map((mKey) => {
+                            const val = item.micros?.[mKey] ?? 0;
+                            if (ADDITIONAL_MICROS.some(m => m.key === mKey)) return null;
+                            return (
+                              <div key={mKey} style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', padding: '0.25rem', border: '1px solid var(--border-glass)' }}>
+                                <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', marginRight: '0.25rem', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>
+                                  {mKey}
+                                </span>
+                                <input
+                                  type="number"
+                                  value={val}
+                                  onChange={(e) => {
+                                    const parsed = parseFloat(e.target.value) || 0;
+                                    const updated = [...items];
+                                    const nextItem = { ...updated[index] };
+                                    if (nextItem.micros) {
+                                      nextItem.micros = {
+                                        ...nextItem.micros,
+                                        [mKey]: parsed
+                                      };
+                                    }
+                                    updated[index] = nextItem;
+                                    setItems(updated);
+                                  }}
+                                  style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', textAlign: 'center' }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = [...items];
+                                    const nextItem = { ...updated[index] };
+                                    if (nextItem.micros) {
+                                      const copy = { ...nextItem.micros };
+                                      delete copy[mKey];
+                                      nextItem.micros = Object.keys(copy).length > 0 ? copy : undefined;
+                                    }
+                                    updated[index] = nextItem;
+                                    setItems(updated);
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: 'var(--accent-rose)', fontSize: '0.75rem', cursor: 'pointer', padding: '0 0.15rem' }}
+                                  title={`Remove ${mKey}`}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })}
+
+                          <div style={{
+                            gridColumn: 'span 3',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            marginTop: '0.5rem',
+                            borderTop: '1px solid rgba(255,255,255,0.03)',
+                            paddingTop: '0.5rem'
+                          }}>
+                            <input
+                              type="text"
+                              placeholder="Nutrient Name (e.g. Copper)"
+                              value={newMicroInputs[index]?.name ?? ''}
+                              onChange={(e) => setNewMicroInputs(prev => ({
+                                ...prev,
+                                [index]: { ...(prev[index] ?? { val: '', unit: 'mg' }), name: e.target.value }
+                              }))}
+                              style={{ flex: 2, background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.75rem', padding: '0.2rem 0.4rem', outline: 'none' }}
+                            />
+                            <input
+                              type="number"
+                              placeholder="Value"
+                              value={newMicroInputs[index]?.val ?? ''}
+                              onChange={(e) => setNewMicroInputs(prev => ({
+                                ...prev,
+                                [index]: { ...(prev[index] ?? { name: '', unit: 'mg' }), val: e.target.value }
+                              }))}
+                              style={{ flex: 1, background: 'var(--bg-glass-light)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.75rem', padding: '0.2rem 0.4rem', outline: 'none', width: '50px' }}
+                            />
+                            <select
+                              value={newMicroInputs[index]?.unit ?? 'mg'}
+                              onChange={(e) => setNewMicroInputs(prev => ({
+                                ...prev,
+                                [index]: { ...(prev[index] ?? { name: '', val: '' }), unit: e.target.value }
+                              }))}
+                              style={{ background: 'var(--bg-glass-light)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', fontSize: '0.75rem', padding: '0.18rem' }}
+                            >
+                              <option value="mg">mg</option>
+                              <option value="mcg">mcg</option>
+                              <option value="g">g</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const pending = newMicroInputs[index];
+                                if (!pending || !pending.name.trim() || !pending.val) return;
+                                const normName = pending.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+                                const val = parseFloat(pending.val) || 0;
+                                
+                                const updated = [...items];
+                                const nextItem = { ...updated[index] };
+                                nextItem.micros = {
+                                  ...(nextItem.micros || {}),
+                                  [normName]: val
+                                };
+                                updated[index] = nextItem;
+                                setItems(updated);
+                                
+                                setNewMicroInputs(prev => ({
+                                  ...prev,
+                                  [index]: { name: '', val: '', unit: 'mg' }
+                                }));
+                              }}
+                              disabled={!newMicroInputs[index]?.name.trim() || !newMicroInputs[index]?.val}
+                              style={{
+                                background: 'var(--accent-purple)',
+                                border: 'none',
+                                borderRadius: 'var(--radius-sm)',
+                                color: '#fff',
+                                fontSize: '0.72rem',
+                                padding: '0.22rem 0.5rem',
+                                cursor: 'pointer',
+                                opacity: (!newMicroInputs[index]?.name.trim() || !newMicroInputs[index]?.val) ? 0.5 : 1
+                              }}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Quick portion scaling — one tap to halve/grow a serving,
                         no mental macro math. Multipliers compose on current values. */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
@@ -851,7 +1065,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                         }
                       }}
                       placeholder="Preset name (e.g. My breakfast)"
-                      style={{ flex: 1, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' }}
+                      style={{ flex: 1, background: 'var(--bg-glass-light)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' }}
                     />
                     <button
                       type="button"
@@ -890,7 +1104,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                 disabled={corrStatus === 'processing'}
                 style={{
                   width: '100%',
-                  background: 'rgba(0,0,0,0.2)',
+                  background: 'var(--bg-glass-light)',
                   border: '1px solid var(--border-glass)',
                   borderRadius: '99px',
                   padding: '0.6rem 2.5rem 0.6rem 1rem',

@@ -927,6 +927,21 @@ export const App: React.FC = () => {
       fiber: ing.fiber != null ? Math.round(ing.fiber * ratio * 10) / 10 : undefined,
       sodium: ing.sodium != null ? Math.round(ing.sodium * ratio) : undefined,
       iron: ing.iron != null ? Math.round(ing.iron * ratio * 10) / 10 : undefined,
+      calcium: ing.calcium != null ? Math.round(ing.calcium * ratio) : undefined,
+      potassium: ing.potassium != null ? Math.round(ing.potassium * ratio) : undefined,
+      cholesterol: ing.cholesterol != null ? Math.round(ing.cholesterol * ratio) : undefined,
+      saturatedFat: ing.saturatedFat != null ? Math.round(ing.saturatedFat * ratio * 10) / 10 : undefined,
+      transFat: ing.transFat != null ? Math.round(ing.transFat * ratio * 10) / 10 : undefined,
+      vitaminA: ing.vitaminA != null ? Math.round(ing.vitaminA * ratio * 10) / 10 : undefined,
+      vitaminC: ing.vitaminC != null ? Math.round(ing.vitaminC * ratio * 10) / 10 : undefined,
+      vitaminD: ing.vitaminD != null ? Math.round(ing.vitaminD * ratio * 10) / 10 : undefined,
+      zinc: ing.zinc != null ? Math.round(ing.zinc * ratio * 10) / 10 : undefined,
+      magnesium: ing.magnesium != null ? Math.round(ing.magnesium * ratio) : undefined,
+      folate: ing.folate != null ? Math.round(ing.folate * ratio * 10) / 10 : undefined,
+      micros: ing.micros ? Object.entries(ing.micros).reduce((acc, [key, val]) => {
+        acc[key] = Math.round(val * ratio * 100) / 100;
+        return acc;
+      }, {} as Record<string, number>) : undefined,
       confidence: 'high',
     }));
     if (items.length === 0) return;
@@ -1241,6 +1256,7 @@ export const App: React.FC = () => {
               onCopyMeal={handleCopyMeal}
               onScaleItem={handleScaleItem}
               goals={goals}
+              customMicros={appSettings.customMicros}
             />
           </div>
         )}

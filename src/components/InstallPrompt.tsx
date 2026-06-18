@@ -125,17 +125,17 @@ export const InstallPrompt: React.FC = () => {
             <X size={16} />
           </button>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem', color: 'var(--text-secondary, #cbd5e1)', lineHeight: '1.4' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
           <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--accent-purple, #10b981)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, fontSize: '0.75rem' }}>1</div>
+            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--accent-purple)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, fontSize: '0.75rem' }}>1</div>
             <div>
-              Tap the <strong>Share</strong> button in Safari (looks like a square with an arrow pointing up <span style={{ display: 'inline-flex', padding: '2px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', verticalAlign: 'middle' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg></span>).
+              Tap the <strong>Share</strong> button in Safari (looks like a square with an arrow pointing up <span style={{ display: 'inline-flex', padding: '2px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: 'var(--radius-sm)', verticalAlign: 'middle' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg></span>).
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--accent-purple, #10b981)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, fontSize: '0.75rem' }}>2</div>
+            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--accent-purple)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, fontSize: '0.75rem' }}>2</div>
             <div>
-              Scroll down the share sheet and select <strong>Add to Home Screen</strong> <span style={{ display: 'inline-flex', padding: '2px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', verticalAlign: 'middle', fontWeight: 600 }}>+</span>.
+              Scroll down the share sheet and select <strong>Add to Home Screen</strong> <span style={{ display: 'inline-flex', padding: '2px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: 'var(--radius-sm)', verticalAlign: 'middle', fontWeight: 600 }}>+</span>.
             </div>
           </div>
         </div>
@@ -213,7 +213,7 @@ export const InstallPrompt: React.FC = () => {
         <div style={{ fontFamily: "var(--font-display, 'Outfit', sans-serif)", fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary, #fff)' }}>
           Install HelloCal
         </div>
-        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #94a3b8)' }}>
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
           {platform === 'ios' 
             ? "Tap Share, then 'Add to Home Screen' for standalone access." 
             : "Add to home screen for instant, full-screen tracking."}

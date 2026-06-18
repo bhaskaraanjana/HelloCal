@@ -62,7 +62,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          animation: 'scaleInModal 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+          animation: 'scaleInModal 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
           color: 'var(--text-primary)'
         }}
       >
@@ -93,8 +93,8 @@ export const CustomModal: React.FC<CustomModalProps> = ({
               background: 'rgba(255, 255, 255, 0.03)',
               border: '1px solid var(--border-glass)',
               borderRadius: '50%',
-              width: '28px',
-              height: '28px',
+              width: '44px',
+              height: '44px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -104,8 +104,9 @@ export const CustomModal: React.FC<CustomModalProps> = ({
               padding: 0
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+            aria-label="Close modal"
           >
-            <X size={14} />
+            <X size={18} />
           </button>
         </div>
 

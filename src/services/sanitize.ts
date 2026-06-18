@@ -177,19 +177,61 @@ export const MICRO_FIELD_ALIASES: Record<string, string> = {
   carbohydrates: 'carbs',
   fat: 'fat',
   calories: 'calories',
+  calcium: 'calcium',
+  potassium: 'potassium',
+  cholesterol: 'cholesterol',
+  saturatedfat: 'saturatedFat',
+  transfat: 'transFat',
+  vitamina: 'vitaminA',
+  vitaminc: 'vitaminC',
+  vitamind: 'vitaminD',
+  vitaminb12: 'vitaminB12',
+  zinc: 'zinc',
+  magnesium: 'magnesium',
+  folate: 'folate',
+  vitd: 'vitaminD',
+  vitd3: 'vitaminD',
+  vitamind3: 'vitaminD',
+  vita: 'vitaminA',
+  vitc: 'vitaminC',
+  vitb12: 'vitaminB12',
+  satfat: 'saturatedFat',
+  folicacid: 'folate',
 };
 
 /** FoodItem numeric fields the parser populates — the only keys a custom micro can auto-track. */
-export const DATA_BACKED_MICRO_FIELDS = new Set(['addedSugar', 'fiber', 'sodium', 'iron', 'sugar', 'protein', 'carbs', 'fat', 'calories']);
+class DynamicSet extends Set<string> {
+  has(fieldKey: string): boolean {
+    return typeof fieldKey === 'string' && fieldKey.trim().length > 0;
+  }
+}
+
+export const DATA_BACKED_MICRO_FIELDS = new DynamicSet([
+  'addedSugar', 'fiber', 'sodium', 'iron', 'sugar', 'protein', 'carbs', 'fat', 'calories',
+  'calcium', 'potassium', 'cholesterol', 'saturatedFat', 'transFat',
+  'vitaminA', 'vitaminC', 'vitaminD', 'vitaminB12', 'zinc', 'magnesium', 'folate'
+]);
 
 /**
- * Canonical tracked unit for a data-backed micro field (mg for sodium/iron, g
- * otherwise), or null for a non-backed field. The HUD sums the raw FoodItem value
- * ignoring the micro's stored unit, so both the add path and the heal path must
- * force this unit to avoid a g-vs-mg label mismatch.
+ * Canonical tracked unit for a data-backed micro field, or null for a non-backed field.
+ * The HUD sums the raw FoodItem value ignoring the micro's stored unit, so both the
+ * add path and the heal path must force this unit to avoid a unit label mismatch.
  */
-export const canonicalMicroUnit = (fieldKey: string): string | null =>
-  DATA_BACKED_MICRO_FIELDS.has(fieldKey) ? (fieldKey === 'sodium' || fieldKey === 'iron' ? 'mg' : 'g') : null;
+export const canonicalMicroUnit = (fieldKey: string): string | null => {
+  const hardcoded = [
+    'addedSugar', 'fiber', 'sodium', 'iron', 'sugar', 'protein', 'carbs', 'fat', 'calories',
+    'calcium', 'potassium', 'cholesterol', 'saturatedFat', 'transFat',
+    'vitaminA', 'vitaminC', 'vitaminD', 'vitaminB12', 'zinc', 'magnesium', 'folate'
+  ];
+  if (!hardcoded.includes(fieldKey)) return null;
+  if (['sodium', 'iron', 'calcium', 'potassium', 'cholesterol', 'magnesium', 'zinc', 'vitaminC'].includes(fieldKey)) {
+    return 'mg';
+  }
+  if (['vitaminA', 'vitaminD', 'vitaminB12', 'folate'].includes(fieldKey)) {
+    return 'mcg';
+  }
+  return 'g';
+};
 
 /** Coerce raw custom micronutrient definitions; drops entries missing name/fieldKey. */
 export function sanitizeCustomMicros(raw: unknown): CustomMicro[] {
@@ -249,6 +291,27 @@ const coerceIngredient = (raw: unknown): RecipeIngredient | null => {
   const o = raw as Record<string, unknown>;
   const name = typeof o.name === 'string' ? o.name.trim() : '';
   if (!name) return null;
+
+  const knownKeys = [
+    'name', 'quantity', 'calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium', 'iron',
+    'calcium', 'potassium', 'cholesterol', 'saturatedFat', 'transFat', 'vitaminA', 'vitaminC', 'vitaminD', 'vitaminB12',
+    'zinc', 'magnesium', 'folate', 'micros'
+  ];
+  const micros: Record<string, number> = {};
+  for (const key of Object.keys(o)) {
+    if (!knownKeys.includes(key) && o[key] != null && typeof o[key] !== 'object' && !isNaN(Number(o[key]))) {
+      micros[key.toLowerCase()] = nonNeg(o[key]);
+    }
+  }
+  if (o.micros && typeof o.micros === 'object') {
+    for (const key of Object.keys(o.micros as object)) {
+      const val = (o.micros as Record<string, unknown>)[key];
+      if (val != null && typeof val !== 'object' && !isNaN(Number(val))) {
+        micros[key.toLowerCase()] = nonNeg(val);
+      }
+    }
+  }
+
   return {
     name,
     quantity: typeof o.quantity === 'string' && o.quantity.trim() ? o.quantity : '1 serving',
@@ -261,6 +324,19 @@ const coerceIngredient = (raw: unknown): RecipeIngredient | null => {
     fiber: o.fiber != null ? nonNeg(o.fiber) : undefined,
     sodium: o.sodium != null ? Math.round(nonNeg(o.sodium)) : undefined,
     iron: o.iron != null ? nonNeg(o.iron) : undefined,
+    calcium: o.calcium != null ? Math.round(nonNeg(o.calcium)) : undefined,
+    potassium: o.potassium != null ? Math.round(nonNeg(o.potassium)) : undefined,
+    cholesterol: o.cholesterol != null ? Math.round(nonNeg(o.cholesterol)) : undefined,
+    saturatedFat: o.saturatedFat != null ? nonNeg(o.saturatedFat) : undefined,
+    transFat: o.transFat != null ? nonNeg(o.transFat) : undefined,
+    vitaminA: o.vitaminA != null ? nonNeg(o.vitaminA) : undefined,
+    vitaminC: o.vitaminC != null ? nonNeg(o.vitaminC) : undefined,
+    vitaminD: o.vitaminD != null ? nonNeg(o.vitaminD) : undefined,
+    vitaminB12: o.vitaminB12 != null ? nonNeg(o.vitaminB12) : undefined,
+    zinc: o.zinc != null ? nonNeg(o.zinc) : undefined,
+    magnesium: o.magnesium != null ? Math.round(nonNeg(o.magnesium)) : undefined,
+    folate: o.folate != null ? nonNeg(o.folate) : undefined,
+    micros: Object.keys(micros).length > 0 ? micros : undefined,
   };
 };
 

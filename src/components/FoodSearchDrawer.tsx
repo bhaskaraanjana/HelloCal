@@ -123,7 +123,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
         <div className="bottom-sheet-handle" />
 
         {/* Header */}
-        <div style={{
+        <div className="search-header-container" style={{
           padding: '1.1rem 1.5rem 0.85rem',
           borderBottom: '1px solid var(--border-glass)',
           display: 'flex',
@@ -134,13 +134,13 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
             <Search size={18} color="var(--accent-purple)" />
             Search Foods
           </h2>
-          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
-            <X size={16} />
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={18} />
           </button>
         </div>
 
         {/* Search field */}
-        <div style={{ padding: '0.85rem 1.25rem' }}>
+        <div className="search-field-container" style={{ padding: '0.85rem 1.25rem' }}>
           <div style={{ position: 'relative' }}>
             <Search
               size={16}
@@ -155,7 +155,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
               placeholder="Search a food or brand (e.g. greek yogurt)..."
               style={{
                 width: '100%',
-                background: 'rgba(0,0,0,0.2)',
+                background: 'var(--bg-glass-light)',
                 border: '1px solid var(--border-glass)',
                 borderRadius: '99px',
                 padding: '0.7rem 1rem 0.7rem 2.4rem',
@@ -182,7 +182,7 @@ export const FoodSearchDrawer: React.FC<FoodSearchDrawerProps> = ({ isOpen, onCl
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.25rem 1.25rem' }}>
+        <div className="search-body-container" style={{ flex: 1, overflowY: 'auto', padding: '0 1.25rem 1.25rem' }}>
           {/* Recents (shown when no active query) */}
           {query.trim().length < 2 && recents.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>

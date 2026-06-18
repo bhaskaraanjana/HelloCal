@@ -107,7 +107,7 @@ export const QuickLogBar: React.FC<QuickLogBarProps> = ({
                   width: '26px',
                   height: '26px',
                   flexShrink: 0,
-                  borderRadius: '9px',
+                  borderRadius: 'var(--radius-sm)',
                   background: 'rgba(139, 92, 246, 0.12)',
                   border: '1px solid var(--border-glass-glow)',
                   color: 'var(--accent-purple)'

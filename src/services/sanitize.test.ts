@@ -30,11 +30,12 @@ describe('sanitizeCustomMicros', () => {
     expect(m.unit).toBe('mg');
   });
 
-  it('canonicalMicroUnit: mg for sodium/iron, g for other backed fields, null otherwise', () => {
+  it('canonicalMicroUnit: mg for sodium/iron/potassium/calcium etc, g for other backed fields, null otherwise', () => {
     expect(canonicalMicroUnit('sodium')).toBe('mg');
     expect(canonicalMicroUnit('iron')).toBe('mg');
+    expect(canonicalMicroUnit('potassium')).toBe('mg');
     expect(canonicalMicroUnit('addedSugar')).toBe('g');
-    expect(canonicalMicroUnit('potassium')).toBeNull();
+    expect(canonicalMicroUnit('selenium')).toBeNull();
   });
 });
 

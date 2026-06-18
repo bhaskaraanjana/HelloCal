@@ -163,10 +163,12 @@ export const WaterTracker: React.FC<WaterTrackerProps> = ({
             <div
               style={{
                 width: '100%',
-                height: `${fillPercent}%`,
+                height: '100%',
+                transform: `scaleY(${fillPercent / 100})`,
+                transformOrigin: 'bottom',
                 background: `linear-gradient(to top, ${WATER_COLOR}, ${WATER_GLOW})`,
                 boxShadow: `0 0 18px ${WATER_GLOW}`,
-                transition: 'height 0.7s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             />
             <div

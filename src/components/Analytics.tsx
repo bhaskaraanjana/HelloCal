@@ -196,14 +196,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, workouts = [], goals
       legend: {
         position: 'top' as const,
         labels: {
-          color: '#94a3b8',
+          color: '#aab6c7',
           font: { family: 'Outfit', size: 11 }
         }
       },
       tooltip: {
         backgroundColor: 'rgba(19, 21, 32, 0.95)',
         titleColor: '#f8fafc',
-        bodyColor: '#94a3b8',
+        bodyColor: '#aab6c7',
         borderColor: 'rgba(255, 255, 255, 0.1)',
         borderWidth: 1,
         padding: 12
@@ -212,11 +212,11 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, workouts = [], goals
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: '#94a3b8', font: { family: 'Outfit', size: 11 } }
+        ticks: { color: '#aab6c7', font: { family: 'Outfit', size: 11 } }
       },
       y: {
         grid: { color: 'rgba(255, 255, 255, 0.04)' },
-        ticks: { color: '#94a3b8', font: { family: 'Outfit', size: 11 } }
+        ticks: { color: '#aab6c7', font: { family: 'Outfit', size: 11 } }
       }
     }
   };
@@ -259,7 +259,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, workouts = [], goals
       legend: {
         position: 'top' as const,
         labels: {
-          color: '#94a3b8',
+          color: '#aab6c7',
           font: { family: 'Outfit', size: 11 }
         }
       },
@@ -279,12 +279,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, workouts = [], goals
       x: {
         stacked: true,
         grid: { display: false },
-        ticks: { color: '#94a3b8', font: { family: 'Outfit', size: 11 } }
+        ticks: { color: '#aab6c7', font: { family: 'Outfit', size: 11 } }
       },
       y: {
         stacked: true,
         grid: { color: 'rgba(255, 255, 255, 0.04)' },
-        ticks: { color: '#94a3b8', font: { family: 'Outfit', size: 11 } }
+        ticks: { color: '#aab6c7', font: { family: 'Outfit', size: 11 } }
       }
     }
   };
@@ -314,7 +314,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ logs, workouts = [], goals
       legend: {
         position: 'bottom' as const,
         labels: {
-          color: '#94a3b8',
+          color: '#aab6c7',
           font: { family: 'Outfit', size: 12 },
           padding: 15,
           usePointStyle: true,

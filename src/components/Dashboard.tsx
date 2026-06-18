@@ -352,8 +352,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </button>
       </div>
     );
-    const inputStyle: React.CSSProperties = { padding: '0.45rem 0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' };
-    const iconBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '7px', background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'pointer' };
+    const inputStyle: React.CSSProperties = { padding: '0.45rem 0.6rem', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' };
+    const iconBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'pointer' };
 
     if (key === 'calorieHalo') {
       const setCal = (cal: number) => { const g = { ...draftGoals, calories: cal }; setDraftGoals(g); onSaveGoals?.(g); };
@@ -535,7 +535,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     if (e.key === 'ArrowUp') { e.preventDefault(); movePanelByKey(key, -1); }
                     else if (e.key === 'ArrowDown') { e.preventDefault(); movePanelByKey(key, 1); }
                   }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', flexShrink: 0, borderRadius: '9px', background: 'rgba(139,92,246,0.1)', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'grab', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', flexShrink: 0, borderRadius: 'var(--radius-sm)', background: 'rgba(139,92,246,0.1)', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'grab', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
                 >
                   <GripVertical size={16} />
                 </button>
@@ -555,8 +555,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                 </button>
               </div>
-              <div style={{ maxHeight: isCollapsed ? 0 : '1400px', opacity: isCollapsed ? 0 : 1, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
-                {renderBody(key)}
+              <div className={`panel-collapse-wrapper ${!isCollapsed ? 'expanded' : ''}`}>
+                <div className="panel-collapse-content">
+                  {renderBody(key)}
+                </div>
               </div>
             </div>
           );
@@ -584,14 +586,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Per-panel settings drawer (bottom-sheet on mobile via CSS) */}
       {settingsKey && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`${PANEL_META[settingsKey as PanelKey].title} settings`} onClick={() => setSettingsKey(null)}>
-          <div ref={drawerRef} className="panel-settings-drawer" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-secondary, #131520)', border: '1px solid var(--border-glass)', borderRadius: '18px', padding: '1.25rem', width: '420px', maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto' }}>
+          <div ref={drawerRef} className="panel-settings-drawer" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-secondary, #131520)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', width: '420px', maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto' }}>
             <div className="bottom-sheet-handle" />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', color: 'var(--text-primary)', margin: 0 }}>
                 {PANEL_META[settingsKey as PanelKey].icon}
                 {PANEL_META[settingsKey as PanelKey].title} settings
               </h3>
-              <button type="button" onClick={() => setSettingsKey(null)} aria-label="Close" className="btn-icon" style={{ borderRadius: '50%', width: '32px', height: '32px' }}>
+              <button type="button" onClick={() => setSettingsKey(null)} aria-label="Close" className="btn-icon" style={{ borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={16} />
               </button>
             </div>

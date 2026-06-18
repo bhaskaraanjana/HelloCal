@@ -12,6 +12,19 @@ export interface FoodItem {
   fiber?: number;       // fiber in grams
   sodium?: number;      // sodium in milligrams
   iron?: number;        // iron in milligrams
+  calcium?: number;     // calcium in milligrams
+  potassium?: number;   // potassium in milligrams
+  cholesterol?: number; // cholesterol in milligrams
+  saturatedFat?: number; // saturated fat in grams
+  transFat?: number;     // trans fat in grams
+  vitaminA?: number;     // vitamin A in micrograms (mcg)
+  vitaminC?: number;     // vitamin C in milligrams (mg)
+  vitaminD?: number;     // vitamin D in micrograms (mcg)
+  vitaminB12?: number;   // vitamin B12 in micrograms (mcg)
+  zinc?: number;         // zinc in milligrams (mg)
+  magnesium?: number;    // magnesium in milligrams (mg)
+  folate?: number;       // folate in micrograms (mcg)
+  micros?: Record<string, number>; // dynamic micro-nutrients map
 }
 
 export interface MealLog {
@@ -209,6 +222,19 @@ export interface RecipeIngredient {
   fiber?: number;
   sodium?: number;
   iron?: number;
+  calcium?: number;
+  potassium?: number;
+  cholesterol?: number;
+  saturatedFat?: number;
+  transFat?: number;
+  vitaminA?: number;
+  vitaminC?: number;
+  vitaminD?: number;
+  vitaminB12?: number;
+  zinc?: number;
+  magnesium?: number;
+  folate?: number;
+  micros?: Record<string, number>;
 }
 
 export interface Recipe {

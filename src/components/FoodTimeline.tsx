@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { MealLog, WorkoutLog, UserGoals } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, FoodItem, CustomMicro } from '../types/nutrition';
 import {
   Trash2,
   CalendarRange,
@@ -20,6 +20,30 @@ import {
 } from 'lucide-react';
 import { EmptyState } from './ui/EmptyState';
 
+interface MicroFieldConfig {
+  key: keyof FoodItem;
+  label: string;
+  unit: string;
+  color: string;
+}
+
+const ADDITIONAL_MICROS: MicroFieldConfig[] = [
+  { key: 'sugar', label: 'Sugar', unit: 'g', color: 'var(--accent-rose)' },
+  { key: 'saturatedFat', label: 'Sat Fat', unit: 'g', color: 'var(--accent-amber)' },
+  { key: 'transFat', label: 'Trans Fat', unit: 'g', color: 'var(--accent-amber)' },
+  { key: 'iron', label: 'Iron', unit: 'mg', color: 'var(--accent-purple)' },
+  { key: 'calcium', label: 'Calcium', unit: 'mg', color: 'var(--accent-teal)' },
+  { key: 'potassium', label: 'Potassium', unit: 'mg', color: 'var(--accent-blue)' },
+  { key: 'cholesterol', label: 'Cholest', unit: 'mg', color: 'var(--accent-rose)' },
+  { key: 'vitaminA', label: 'Vit A', unit: 'mcg', color: 'var(--accent-teal)' },
+  { key: 'vitaminC', label: 'Vit C', unit: 'mg', color: 'var(--accent-amber)' },
+  { key: 'vitaminD', label: 'Vit D', unit: 'mcg', color: 'var(--accent-blue)' },
+  { key: 'vitaminB12', label: 'Vit B12', unit: 'mcg', color: 'var(--accent-purple)' },
+  { key: 'zinc', label: 'Zinc', unit: 'mg', color: 'var(--accent-teal)' },
+  { key: 'magnesium', label: 'Magnes', unit: 'mg', color: 'var(--accent-blue)' },
+  { key: 'folate', label: 'Folate', unit: 'mcg', color: 'var(--accent-purple)' }
+];
+
 interface FoodTimelineProps {
   logs: MealLog[];
   workouts?: WorkoutLog[];
@@ -30,9 +54,10 @@ interface FoodTimelineProps {
   onCopyMeal?: (log: MealLog) => void;
   onScaleItem?: (logId: string, itemId: string, factor: number) => void;
   goals?: UserGoals;
+  customMicros?: CustomMicro[];
 }
 
-export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, onCopyMeal, onScaleItem, goals }) => {
+export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, onCopyMeal, onScaleItem, goals, customMicros }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'feed'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -443,7 +468,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               className="glass-card" 
               style={{ 
                 padding: '1rem', 
-                background: 'rgba(15,16,25,0.95)', 
+                background: 'var(--bg-secondary)', 
                 borderColor: 'var(--border-glass-glow)', 
                 boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
                 animation: 'bottomSheetIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
@@ -513,11 +538,13 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.03)', borderRadius: '99px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
-                  width: `${Math.min((dailyCals / (goals.calories + dailyBurned)) * 100, 100)}%`,
+                  width: '100%',
+                  transform: `scaleX(${Math.min(dailyCals / (goals.calories + dailyBurned), 1)})`,
+                  transformOrigin: 'left',
                   backgroundColor: dailyCals > (goals.calories + dailyBurned) ? 'var(--accent-rose)' : 'var(--accent-purple)',
                   boxShadow: dailyCals > (goals.calories + dailyBurned) ? '0 0 8px var(--accent-rose-glow)' : '0 0 8px var(--accent-purple-glow)',
                   borderRadius: '99px',
-                  transition: 'width 0.5s ease-out'
+                  transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
                 }} />
               </div>
             )}
@@ -621,6 +648,24 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               const mealAddedSugar = log.items.reduce((sum, item) => sum + (Number(item.addedSugar) || 0), 0);
               const mealFiber = log.items.reduce((sum, item) => sum + (Number(item.fiber) || 0), 0);
               const mealSodium = log.items.reduce((sum, item) => sum + (Number(item.sodium) || 0), 0);
+
+              const mealMicrosMap: Record<string, number> = {};
+              log.items.forEach(item => {
+                ADDITIONAL_MICROS.forEach(micro => {
+                  const val = Number(item[micro.key]);
+                  if (val > 0) {
+                    mealMicrosMap[micro.key] = (mealMicrosMap[micro.key] || 0) + val;
+                  }
+                });
+                if (item.micros) {
+                  Object.entries(item.micros).forEach(([mKey, val]) => {
+                    const numVal = Number(val);
+                    if (numVal > 0) {
+                      mealMicrosMap[mKey] = (mealMicrosMap[mKey] || 0) + numVal;
+                    }
+                  });
+                }
+              });
 
               const isExpanded = expandedFoodKey === log.id;
 
@@ -849,6 +894,24 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                             <span>🌿 Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{item.fiber !== undefined ? item.fiber : 0}g</strong></span>
                             <span style={{ opacity: 0.3 }}>•</span>
                             <span>🧂 Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{item.sodium !== undefined ? item.sodium : 0}mg</strong></span>
+                            {ADDITIONAL_MICROS.filter(m => item[m.key] !== undefined && (item[m.key] as number) > 0).map(micro => (
+                              <React.Fragment key={micro.key}>
+                                <span style={{ opacity: 0.3 }}>•</span>
+                                <span>{micro.label}: <strong style={{ color: micro.color }}>{(item as any)[micro.key]}{micro.unit}</strong></span>
+                              </React.Fragment>
+                            ))}
+                            {item.micros && Object.entries(item.micros).filter(([_, val]) => val > 0).map(([mKey, val]) => {
+                              const custom = customMicros?.find(c => c.fieldKey === mKey);
+                              const label = custom ? `${custom.emoji} ${custom.name}` : mKey.charAt(0).toUpperCase() + mKey.slice(1);
+                              const unit = custom ? custom.unit : 'mg';
+                              const color = custom ? custom.color : 'var(--text-secondary)';
+                              return (
+                                <React.Fragment key={mKey}>
+                                  <span style={{ opacity: 0.3 }}>•</span>
+                                  <span>{label}: <strong style={{ color }}>{val}{unit}</strong></span>
+                                </React.Fragment>
+                              );
+                            })}
                           </div>
                         )}
 
@@ -862,7 +925,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onScaleItem(log.id, item.id, factor); }}
                                 aria-label={`Scale ${item.name} by ${label}`}
-                                style={{ padding: '0.15rem 0.5rem', borderRadius: '7px', background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--accent-purple)', fontSize: '0.68rem', fontWeight: 600, cursor: 'pointer' }}
+                                style={{ padding: '0.35rem 0.65rem', minHeight: '36px', borderRadius: '8px', background: 'rgba(139,92,246,0.08)', border: '1px solid var(--border-glass)', color: 'var(--accent-purple)', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer' }}
                               >
                                 {label}
                               </button>
@@ -917,6 +980,23 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                       <span>Added Sugar: <strong style={{ color: 'var(--accent-rose)' }}>{mealAddedSugar}g</strong></span>
                       <span>Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{mealFiber}g</strong></span>
                       <span>Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{mealSodium}mg</strong></span>
+                      {Object.entries(mealMicrosMap).map(([mKey, val]) => {
+                        if (mKey === 'addedSugar' || mKey === 'fiber' || mKey === 'sodium') return null;
+                        const addMicro = ADDITIONAL_MICROS.find(m => m.key === mKey);
+                        const custom = customMicros?.find(c => c.fieldKey === mKey);
+                        const label = addMicro ? addMicro.label : (custom ? `${custom.emoji} ${custom.name}` : mKey.charAt(0).toUpperCase() + mKey.slice(1));
+                        const unit = addMicro ? addMicro.unit : (custom ? custom.unit : 'mg');
+                        const color = addMicro ? addMicro.color : (custom ? custom.color : 'var(--text-secondary)');
+                        const isInteger = ['calcium', 'potassium', 'cholesterol', 'magnesium'].includes(mKey);
+                        const displayVal = isInteger ? Math.round(val) : Math.round(val * 10) / 10;
+                        if (displayVal <= 0) return null;
+                        return (
+                          <React.Fragment key={mKey}>
+                            <span style={{ opacity: 0.3 }}>•</span>
+                            <span>{label}: <strong style={{ color }}>{displayVal}{unit}</strong></span>
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   )}
 

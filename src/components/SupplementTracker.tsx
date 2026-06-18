@@ -99,7 +99,7 @@ export const SupplementTracker: React.FC<SupplementTrackerProps> = ({ supplement
           placeholder="Add a supplement (e.g. Vitamin D3)"
           aria-label="Supplement name"
           disabled={busy}
-          style={{ flex: 1, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '0.55rem 0.8rem', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' }}
+          style={{ flex: 1, background: 'var(--bg-glass-light)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', padding: '0.55rem 0.8rem', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' }}
         />
         <button type="submit" disabled={busy || !name.trim()} className="btn btn-primary" aria-label="Add supplement" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0 0.9rem', fontSize: '0.82rem', opacity: busy || !name.trim() ? 0.6 : 1 }}>
           {apiKey ? <Sparkles size={14} /> : <Plus size={14} />}

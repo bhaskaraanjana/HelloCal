@@ -37,8 +37,10 @@ You must handle three types of entries, which you will classify via the "type" f
 3. "mixed": If the user is logging both meals and physical exercises in a single input.
 
 For Food Logging:
-You must estimate calories and macronutrients (protein, carbs, and fat in grams), as well as key micronutrients (sugar, addedSugar, and fiber in grams; sodium in milligrams) for each food item mentioned. If the portion size is ambiguous, make a smart, realistic estimate based on standard USDA serving sizes and note confidence as "guess" rather than "high".
-If sugar, addedSugar, fiber, or sodium are not present or negligible, set them to 0.
+You must estimate calories and macronutrients (protein, carbs, and fat in grams), as well as micronutrients: total sugar, added sugar, and fiber in grams; sodium, iron, calcium, potassium, cholesterol, vitamin C, zinc, and magnesium in milligrams; vitamin A, vitamin D, vitamin B12, and folate in micrograms.
+In addition, you should estimate any other notable micronutrients, vitamins, or minerals present in the food (like copper, selenium, iodine, vitamin K, biotin, choline, manganese, etc.) and list them inside a nested 'micros' object. Map the lowercase alnum name (e.g. "copper", "selenium", "vitamink") to its numeric value in standard units (mcg for iodine/selenium/vitaminK/biotin/chromium, mg for copper/manganese/pantothenicacid/niacin/riboflavin/thiamin).
+If the portion size is ambiguous, make a smart, realistic estimate based on standard USDA serving sizes and note confidence as "guess" rather than "high".
+If any micronutrient is not present or negligible, set it to 0.
 "sugar" is TOTAL sugar; "addedSugar" is ONLY manufacturer/recipe-added sugar (table sugar, syrups, sweeteners). Naturally occurring sugar in whole fruit, plain milk, or plain yogurt is NOT added sugar — set addedSugar to 0 for those. addedSugar must never exceed total sugar.
 Sanity-check every estimate: calories should roughly equal protein*4 + carbs*4 + fat*9 (within ~20%). Never output negative numbers.
 
@@ -60,6 +62,24 @@ You must respond with ONLY a JSON object (no markdown, no prose) matching this e
       "addedSugar": 4.5, // float in grams
       "fiber": 3.0,    // float in grams
       "sodium": 120,   // integer in milligrams
+      "iron": 1.2,     // float in milligrams
+      "calcium": 45.0, // float in milligrams
+      "potassium": 240.0, // float in milligrams
+      "cholesterol": 0.0, // float in milligrams
+      "saturatedFat": 1.5, // float in grams
+      "transFat": 0.0,    // float in grams
+      "vitaminA": 45.0,   // float in micrograms (mcg)
+      "vitaminC": 8.0,    // float in milligrams (mg)
+      "vitaminD": 0.5,    // float in micrograms (mcg)
+      "vitaminB12": 0.1,  // float in micrograms (mcg)
+      "zinc": 0.8,        // float in milligrams (mg)
+      "magnesium": 25.0,  // float in milligrams (mg)
+      "folate": 15.0,     // float in micrograms (mcg)
+      "micros": {         // object containing any other present micronutrients/vitamins not listed above (lowercase keys)
+        "selenium": 12.5, // float in micrograms (mcg)
+        "copper": 0.2,    // float in milligrams (mg)
+        "vitamink": 15.0  // float in micrograms (mcg)
+      },
       "confidence": "high" | "guess"
     }
   ],

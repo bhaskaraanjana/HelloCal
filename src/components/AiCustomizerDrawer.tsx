@@ -196,7 +196,7 @@ export const AiCustomizerDrawer: React.FC<AiCustomizerDrawerProps> = ({
       backgroundColor: 'rgba(5, 5, 8, 0.75)',
       backdropFilter: 'blur(8px)',
       WebkitBackdropFilter: 'blur(8px)',
-      zIndex: 100,
+      zIndex: 2000,
       display: 'flex',
       alignItems: 'flex-end',
       justifyContent: 'center',
@@ -251,7 +251,7 @@ export const AiCustomizerDrawer: React.FC<AiCustomizerDrawerProps> = ({
             </div>
           </div>
 
-          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ padding: '0.4rem', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', cursor: 'pointer' }}>
             <X size={18} color="var(--text-muted)" />
           </button>
         </div>

@@ -96,7 +96,12 @@ export function sumFieldKey(logs: MealLog[], fieldKey: string, ts: number = Date
   for (const log of logs) {
     if (log.timestamp < start || log.timestamp >= end) continue;
     for (const item of log.items) {
-      total += n((item as unknown as Record<string, unknown>)[fieldKey]);
+      const rawItem = item as unknown as Record<string, any>;
+      if (rawItem[fieldKey] !== undefined) {
+        total += n(rawItem[fieldKey]);
+      } else if (rawItem.micros && rawItem.micros[fieldKey] !== undefined) {
+        total += n(rawItem.micros[fieldKey]);
+      }
     }
   }
   return total;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Recipe, RecipeIngredient } from '../types/nutrition';
+import type { Recipe, RecipeIngredient, FoodItem } from '../types/nutrition';
 import { gemini } from '../services/gemini';
 import { 
   BookOpen, Plus, Trash2, Sparkles, Check, Loader2, 
@@ -16,6 +16,31 @@ interface RecipeBoxProps {
   onTriggerToast: (msg: string) => void;
   apiKey: string;
 }
+
+interface MicroFieldConfig {
+  key: keyof FoodItem;
+  label: string;
+  unit: string;
+  color: string;
+  integer?: boolean;
+}
+
+const ADDITIONAL_MICROS: MicroFieldConfig[] = [
+  { key: 'sugar', label: 'Sugar', unit: 'g', color: 'var(--accent-rose)' },
+  { key: 'saturatedFat', label: 'Sat Fat', unit: 'g', color: 'var(--accent-amber)' },
+  { key: 'transFat', label: 'Trans Fat', unit: 'g', color: 'var(--accent-amber)' },
+  { key: 'iron', label: 'Iron', unit: 'mg', color: 'var(--accent-purple)' },
+  { key: 'calcium', label: 'Calcium', unit: 'mg', color: 'var(--accent-teal)', integer: true },
+  { key: 'potassium', label: 'Potassium', unit: 'mg', color: 'var(--accent-blue)', integer: true },
+  { key: 'cholesterol', label: 'Cholest', unit: 'mg', color: 'var(--accent-rose)', integer: true },
+  { key: 'vitaminA', label: 'Vit A', unit: 'mcg', color: 'var(--accent-teal)' },
+  { key: 'vitaminC', label: 'Vit C', unit: 'mg', color: 'var(--accent-amber)' },
+  { key: 'vitaminD', label: 'Vit D', unit: 'mcg', color: 'var(--accent-blue)' },
+  { key: 'vitaminB12', label: 'Vit B12', unit: 'mcg', color: 'var(--accent-purple)' },
+  { key: 'zinc', label: 'Zinc', unit: 'mg', color: 'var(--accent-teal)' },
+  { key: 'magnesium', label: 'Magnes', unit: 'mg', color: 'var(--accent-blue)', integer: true },
+  { key: 'folate', label: 'Folate', unit: 'mcg', color: 'var(--accent-purple)' }
+];
 
 export const RecipeBox: React.FC<RecipeBoxProps> = ({
   recipes,
@@ -223,7 +248,21 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               sugar: est.sugar || 0,
               addedSugar: est.addedSugar || 0,
               fiber: est.fiber || 0,
-              sodium: est.sodium || 0
+              sodium: est.sodium || 0,
+              iron: est.iron || 0,
+              calcium: est.calcium || 0,
+              potassium: est.potassium || 0,
+              cholesterol: est.cholesterol || 0,
+              saturatedFat: est.saturatedFat || 0,
+              transFat: est.transFat || 0,
+              vitaminA: est.vitaminA || 0,
+              vitaminC: est.vitaminC || 0,
+              vitaminD: est.vitaminD || 0,
+              vitaminB12: est.vitaminB12 || 0,
+              zinc: est.zinc || 0,
+              magnesium: est.magnesium || 0,
+              folate: est.folate || 0,
+              micros: est.micros
             };
           }
           return updated;
@@ -233,7 +272,8 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
         const hasMicros = (est.sugar && est.sugar > 0) || 
                           (est.addedSugar && est.addedSugar > 0) || 
                           (est.fiber && est.fiber > 0) || 
-                          (est.sodium && est.sodium > 0);
+                          (est.sodium && est.sodium > 0) ||
+                          ADDITIONAL_MICROS.some(m => (est as any)[m.key] && ((est as any)[m.key] as number) > 0);
         if (hasMicros) {
           setShowMicros(true);
         }
@@ -312,7 +352,8 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
         (ing.sugar && ing.sugar > 0) ||
         (ing.addedSugar && ing.addedSugar > 0) ||
         (ing.fiber && ing.fiber > 0) ||
-        (ing.sodium && ing.sodium > 0)
+        (ing.sodium && ing.sodium > 0) ||
+        ADDITIONAL_MICROS.some(m => (ing as any)[m.key] && ((ing as any)[m.key] as number) > 0)
       );
       if (hasMicros) {
         setShowMicros(true);
@@ -536,7 +577,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                 border: '1px solid var(--border-glass)',
                 background: recipeStatus === 'idle' ? 'rgba(255,255,255,0.005)' : 'transparent',
                 position: 'relative',
-                transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                 width: '100%',
                 boxSizing: 'border-box'
               }}>
@@ -612,7 +653,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                   height: recipeStatus === 'recording' ? '40px' : '0px',
                   opacity: recipeStatus === 'recording' ? 1 : 0,
                   overflow: 'hidden',
-                  transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                   zIndex: 1,
                   width: '100%'
                 }}>
@@ -652,7 +693,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                     justifyContent: 'center',
                     color: 'var(--text-primary)',
                     boxShadow: recipeStatus === 'recording' ? '0 0 30px var(--accent-rose-glow)' : '0 0 20px var(--accent-purple-glow)',
-                    transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                     position: 'relative',
                     zIndex: 1
                   }}
@@ -720,14 +761,14 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               {aiError && (
                 <div style={{
                   fontSize: '0.8rem',
-                  color: '#f87171',
+                  color: 'var(--accent-rose)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.4rem',
-                  backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                  backgroundColor: 'rgba(244, 63, 94, 0.05)',
                   padding: '0.5rem 0.75rem',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(239, 68, 68, 0.1)'
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-glass)'
                 }}>
                   <AlertCircle size={14} />
                   <span>{aiError}</span>
@@ -744,7 +785,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                   style={{
                     width: 'auto',
                     height: '44px',
-                    borderRadius: '22px',
+                    borderRadius: 'var(--radius-xl)',
                     backgroundColor: 'var(--accent-teal)',
                     border: 'none',
                     cursor: (!recipeDescriptionInput.trim() || isAiParsing) ? 'not-allowed' : 'pointer',
@@ -1108,9 +1149,9 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                             display: 'flex', 
                             gap: '0.75rem', 
                             flexWrap: 'wrap',
-                            background: 'rgba(0,0,0,0.15)',
+                            background: 'var(--bg-glass-light)',
                             padding: '0.6rem 0.85rem',
-                            borderRadius: '10px',
+                            borderRadius: 'var(--radius-sm)',
                             alignItems: 'center',
                             width: '100%',
                             boxSizing: 'border-box'
@@ -1377,6 +1418,36 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                             <span style={{ fontSize: '0.9rem', color: 'var(--accent-rose)', fontWeight: 600, opacity: 0.85 }}>Added: {Math.round(totalAddedSugar)}g</span>
                             <span style={{ fontSize: '0.9rem', color: 'var(--accent-blue)', fontWeight: 600, opacity: 0.85 }}>Fiber: {Math.round(totalFiber)}g</span>
                             <span style={{ fontSize: '0.9rem', color: 'var(--accent-amber)', fontWeight: 600, opacity: 0.85 }}>Sod: {Math.round(totalSodium)}mg</span>
+                            {ADDITIONAL_MICROS.filter(m => !['sugar', 'addedSugar', 'fiber', 'sodium'].includes(m.key)).map(micro => {
+                              const totalVal = formIngredients.reduce((s, i) => s + (Number((i as any)[micro.key]) || 0), 0);
+                              if (totalVal <= 0) return null;
+                              const displayVal = micro.integer ? Math.round(totalVal) : Math.round(totalVal * 10) / 10;
+                              return (
+                                <span key={micro.key} style={{ fontSize: '0.9rem', color: micro.color, fontWeight: 600, opacity: 0.85 }}>
+                                  {micro.label}: {displayVal}{micro.unit}
+                                </span>
+                              );
+                            })}
+                            {(() => {
+                              const dynamicBatchMicros: Record<string, number> = {};
+                              formIngredients.forEach(ing => {
+                                if (ing.micros) {
+                                  Object.entries(ing.micros).forEach(([mKey, val]) => {
+                                    dynamicBatchMicros[mKey] = (dynamicBatchMicros[mKey] || 0) + val;
+                                  });
+                                }
+                              });
+                              return Object.entries(dynamicBatchMicros).map(([mKey, totalVal]) => {
+                                if (totalVal <= 0) return null;
+                                const displayVal = Math.round(totalVal * 100) / 100;
+                                const displayName = mKey.charAt(0).toUpperCase() + mKey.slice(1);
+                                return (
+                                  <span key={mKey} style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, opacity: 0.85 }}>
+                                    {displayName}: {displayVal}
+                                  </span>
+                                );
+                              });
+                            })()}
                           </>
                         )}
                       </div>
@@ -1401,6 +1472,36 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                             <span style={{ fontSize: '0.95rem', color: 'var(--accent-rose)', fontWeight: 700, opacity: 0.9 }}>Added: {servAddedSugar}g</span>
                             <span style={{ fontSize: '0.95rem', color: 'var(--accent-blue)', fontWeight: 700, opacity: 0.9 }}>Fiber: {servFiber}g</span>
                             <span style={{ fontSize: '0.95rem', color: 'var(--accent-amber)', fontWeight: 700, opacity: 0.9 }}>Sod: {servSodium}mg</span>
+                            {ADDITIONAL_MICROS.filter(m => !['sugar', 'addedSugar', 'fiber', 'sodium'].includes(m.key)).map(micro => {
+                              const totalVal = formIngredients.reduce((s, i) => s + (Number((i as any)[micro.key]) || 0), 0);
+                              if (totalVal <= 0) return null;
+                              const servVal = micro.integer ? Math.round(totalVal / formServings) : Math.round((totalVal / formServings) * 10) / 10;
+                              return (
+                                <span key={micro.key} style={{ fontSize: '0.95rem', color: micro.color, fontWeight: 700, opacity: 0.9 }}>
+                                  {micro.label}: {servVal}{micro.unit}
+                                </span>
+                              );
+                            })}
+                            {(() => {
+                              const dynamicBatchMicros: Record<string, number> = {};
+                              formIngredients.forEach(ing => {
+                                if (ing.micros) {
+                                  Object.entries(ing.micros).forEach(([mKey, val]) => {
+                                    dynamicBatchMicros[mKey] = (dynamicBatchMicros[mKey] || 0) + val;
+                                  });
+                                }
+                              });
+                              return Object.entries(dynamicBatchMicros).map(([mKey, totalVal]) => {
+                                if (totalVal <= 0) return null;
+                                const servVal = Math.round((totalVal / formServings) * 100) / 100;
+                                const displayName = mKey.charAt(0).toUpperCase() + mKey.slice(1);
+                                return (
+                                  <span key={mKey} style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', fontWeight: 700, opacity: 0.9 }}>
+                                    {displayName}: {servVal}
+                                  </span>
+                                );
+                              });
+                            })()}
                           </>
                         )}
                       </div>
@@ -1747,26 +1848,59 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
 
                           {/* Optional Micronutrients row */}
                           {(() => {
-                            const hasMicros = servSugar > 0 || servAddedSugar > 0 || servFiber > 0 || servSodium > 0;
-                            return hasMicros ? (
-                              <div style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                gap: '0.5rem',
-                                justifyContent: 'space-between',
-                                borderTop: '1px solid rgba(255, 255, 255, 0.03)',
-                                paddingTop: '0.45rem',
-                                marginTop: '0.4rem',
-                                fontSize: '0.72rem',
-                                color: 'var(--text-secondary)'
-                              }}>
-                                {servSugar > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🍭 <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{servSugar}g</span> Sug</span>}
-                                {servAddedSugar > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🍬 <span style={{ color: 'var(--accent-rose)', fontWeight: 600 }}>{servAddedSugar}g</span> Add</span>}
-                                {servFiber > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🌾 <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>{servFiber}g</span> Fib</span>}
-                                {servSodium > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🧂 <span style={{ color: 'var(--accent-amber)', fontWeight: 600 }}>{servSodium}mg</span> Sod</span>}
-                              </div>
-                            ) : null;
-                          })()}
+                             const presentMicros = ADDITIONAL_MICROS.filter(m => {
+                               const totalVal = recipe.ingredients.reduce((s: number, i: RecipeIngredient) => s + (Number((i as any)[m.key]) || 0), 0);
+                               return totalVal > 0;
+                             });
+                             const hasMicros = servSugar > 0 || servAddedSugar > 0 || servFiber > 0 || servSodium > 0 || presentMicros.length > 0;
+                             return hasMicros ? (
+                               <div style={{
+                                 display: 'flex',
+                                 flexWrap: 'wrap',
+                                 gap: '0.5rem',
+                                 justifyContent: 'space-between',
+                                 borderTop: '1px solid rgba(255, 255, 255, 0.03)',
+                                 paddingTop: '0.45rem',
+                                 marginTop: '0.4rem',
+                                 fontSize: '0.72rem',
+                                 color: 'var(--text-secondary)'
+                               }}>
+                                 {servSugar > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🍭 <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{servSugar}g</span> Sug</span>}
+                                 {servAddedSugar > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🍬 <span style={{ color: 'var(--accent-rose)', fontWeight: 600 }}>{servAddedSugar}g</span> Add</span>}
+                                 {servFiber > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🌾 <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>{servFiber}g</span> Fib</span>}
+                                 {servSodium > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>🧂 <span style={{ color: 'var(--accent-amber)', fontWeight: 600 }}>{servSodium}mg</span> Sod</span>}
+                                 {presentMicros.filter(m => !['sugar', 'addedSugar', 'fiber', 'sodium'].includes(m.key)).map(micro => {
+                                   const totalVal = recipe.ingredients.reduce((s: number, i: RecipeIngredient) => s + (Number((i as any)[micro.key]) || 0), 0);
+                                   const servVal = micro.integer ? Math.round(totalVal / recipe.servings) : Math.round((totalVal / recipe.servings) * 10) / 10;
+                                   return (
+                                     <span key={micro.key} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                                       <span style={{ color: micro.color, fontWeight: 600 }}>{servVal}{micro.unit}</span> {micro.label}
+                                     </span>
+                                   );
+                                 })}
+                                 {(() => {
+                                    const dynamicBatchMicros: Record<string, number> = {};
+                                    recipe.ingredients.forEach(ing => {
+                                      if (ing.micros) {
+                                        Object.entries(ing.micros).forEach(([mKey, val]) => {
+                                          dynamicBatchMicros[mKey] = (dynamicBatchMicros[mKey] || 0) + (Number(val) || 0);
+                                        });
+                                      }
+                                    });
+                                    return Object.entries(dynamicBatchMicros).map(([mKey, totalVal]) => {
+                                      if (totalVal <= 0) return null;
+                                      const servVal = Math.round((totalVal / recipe.servings) * 100) / 100;
+                                      const displayName = mKey.charAt(0).toUpperCase() + mKey.slice(1);
+                                      return (
+                                        <span key={mKey} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                                          <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{servVal}</span> {displayName}
+                                        </span>
+                                      );
+                                    });
+                                  })()}
+                               </div>
+                             ) : null;
+                           })()}
                         </div>
 
                         {/* Frictionless Inline Card Portion selector and fast logging */}
@@ -1893,7 +2027,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                               border: '1px solid var(--border-glass)'
                             }}>
                                {recipe.ingredients.map((ing: RecipeIngredient, idx: number) => {
-                                  const hasMicros = ing.sugar || ing.addedSugar || ing.fiber || ing.sodium;
+                                  const hasMicros = ing.sugar || ing.addedSugar || ing.fiber || ing.sodium || ing.micros;
                                   return (
                                     <div key={idx} style={{
                                       display: 'flex',
@@ -1929,6 +2063,19 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                                             {ing.addedSugar ? <span style={{ color: 'var(--accent-rose)', opacity: 0.8 }}>🍬 {ing.addedSugar}g</span> : null}
                                             {ing.fiber ? <span style={{ color: 'var(--accent-blue)', opacity: 0.8 }}>🌾 {ing.fiber}g</span> : null}
                                             {ing.sodium ? <span style={{ color: 'var(--accent-amber)', opacity: 0.8 }}>🧂 {ing.sodium}mg</span> : null}
+                                            {ADDITIONAL_MICROS.filter(m => !['sugar', 'addedSugar', 'fiber', 'sodium'].includes(m.key) && (ing as any)[m.key] !== undefined && ((ing as any)[m.key] as number) > 0).map(micro => (
+                                              <span key={micro.key} style={{ color: micro.color, opacity: 0.8 }}>
+                                                {micro.label}: {(ing as any)[micro.key]}{micro.unit}
+                                              </span>
+                                            ))}
+                                            {ing.micros && Object.entries(ing.micros).filter(([_, val]) => Number(val) > 0).map(([mKey, val]) => {
+                                              const displayName = mKey.charAt(0).toUpperCase() + mKey.slice(1);
+                                              return (
+                                                <span key={mKey} style={{ color: 'var(--text-muted)', opacity: 0.8 }}>
+                                                  {displayName}: {val}
+                                                </span>
+                                              );
+                                            })}
                                           </>
                                         ) : null}
                                       </div>
@@ -1998,7 +2145,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1.5rem',
-                animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
               onClick={(e) => e.stopPropagation()}
             >

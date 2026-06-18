@@ -52,7 +52,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       >
         <div style={{ fontSize: '2.5rem' }}>🟡</div>
         <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Something went wrong</h1>
-        <p style={{ color: 'var(--text-secondary, #9aa6b8)', fontSize: '0.95rem', maxWidth: '420px', lineHeight: 1.5, margin: 0 }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '420px', lineHeight: 1.5, margin: 0 }}>
           HelloCal hit an unexpected error, but your logged data is safe on this device.
           Reloading usually fixes it.
         </p>
@@ -61,7 +61,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           style={{
             marginTop: '0.5rem',
             padding: '0.7rem 1.5rem',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-md)',
             border: 'none',
             cursor: 'pointer',
             fontSize: '0.95rem',

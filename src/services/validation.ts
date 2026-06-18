@@ -133,6 +133,28 @@ export function coerceFoodItem(raw: any, opts?: { applyDriftGate?: boolean }): O
     if (drift > 0.2) confidence = 'guess';
   }
 
+  const knownKeys = [
+    'name', 'quantity', 'calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium', 'iron',
+    'calcium', 'potassium', 'cholesterol', 'saturatedFat', 'transFat', 'vitaminA', 'vitaminC', 'vitaminD', 'vitaminB12',
+    'zinc', 'magnesium', 'folate', 'confidence', 'id', 'micros'
+  ];
+  const micros: Record<string, number> = {};
+  if (raw && typeof raw === 'object') {
+    for (const key of Object.keys(raw)) {
+      if (!knownKeys.includes(key) && (typeof raw[key] === 'number' || (typeof raw[key] === 'string' && raw[key] !== '' && !isNaN(Number(raw[key]))))) {
+        micros[key.toLowerCase()] = Math.round(num(raw[key]) * 100) / 100;
+      }
+    }
+    if (raw.micros && typeof raw.micros === 'object') {
+      for (const key of Object.keys(raw.micros)) {
+        const val = raw.micros[key];
+        if (typeof val === 'number' || (typeof val === 'string' && val !== '' && !isNaN(Number(val)))) {
+          micros[key.toLowerCase()] = Math.round(num(val) * 100) / 100;
+        }
+      }
+    }
+  }
+
   return {
     name,
     quantity: typeof raw.quantity === 'string' && raw.quantity.trim() ? raw.quantity.trim() : '1 serving',
@@ -145,6 +167,19 @@ export function coerceFoodItem(raw: any, opts?: { applyDriftGate?: boolean }): O
     fiber: raw.fiber != null ? Math.round(num(raw.fiber) * 10) / 10 : undefined,
     sodium: raw.sodium != null ? Math.round(num(raw.sodium)) : undefined,
     iron: raw.iron != null ? Math.round(num(raw.iron) * 10) / 10 : undefined,
+    calcium: raw.calcium != null ? Math.round(num(raw.calcium)) : undefined,
+    potassium: raw.potassium != null ? Math.round(num(raw.potassium)) : undefined,
+    cholesterol: raw.cholesterol != null ? Math.round(num(raw.cholesterol)) : undefined,
+    saturatedFat: raw.saturatedFat != null ? Math.round(num(raw.saturatedFat) * 10) / 10 : undefined,
+    transFat: raw.transFat != null ? Math.round(num(raw.transFat) * 10) / 10 : undefined,
+    vitaminA: raw.vitaminA != null ? Math.round(num(raw.vitaminA) * 10) / 10 : undefined,
+    vitaminC: raw.vitaminC != null ? Math.round(num(raw.vitaminC) * 10) / 10 : undefined,
+    vitaminD: raw.vitaminD != null ? Math.round(num(raw.vitaminD) * 10) / 10 : undefined,
+    vitaminB12: raw.vitaminB12 != null ? Math.round(num(raw.vitaminB12) * 10) / 10 : undefined,
+    zinc: raw.zinc != null ? Math.round(num(raw.zinc) * 10) / 10 : undefined,
+    magnesium: raw.magnesium != null ? Math.round(num(raw.magnesium)) : undefined,
+    folate: raw.folate != null ? Math.round(num(raw.folate) * 10) / 10 : undefined,
+    micros: Object.keys(micros).length > 0 ? micros : undefined,
     confidence,
   };
 }

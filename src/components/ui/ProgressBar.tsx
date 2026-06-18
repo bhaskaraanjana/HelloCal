@@ -43,11 +43,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         {/* Animated Neon Fill */}
         <div style={{
           height: '100%',
-          width: `${Math.max(percentage, 0)}%`,
+          width: '100%',
+          transform: `scaleX(${Math.max(percentage, 0) / 100})`,
+          transformOrigin: 'left',
           backgroundColor: color,
           boxShadow: `0 0 10px ${glowColor}`,
           borderRadius: '99px',
-          transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+          transition: 'transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
         }} />
       </div>
       

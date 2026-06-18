@@ -500,7 +500,9 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 100;
 }
 
-[data-tooltip]:hover::before {
+[data-tooltip]:hover::before,
+[data-tooltip]:focus-within::before,
+[data-tooltip]:active::before {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
@@ -685,8 +687,8 @@ h1, h2, h3, h4, h5, h6 {
   }
   /* Bigger drag handle for fingers */
   .dashboard-icon-pill {
-    width: 40px !important;
-    height: 40px !important;
+    width: 44px !important;
+    height: 44px !important;
   }
 
   /* Card and Spacing Optimization */
@@ -810,4 +812,37 @@ textarea:focus-visible {
   0%, 100% { filter: drop-shadow(0 0 4px var(--accent-rose-glow)); }
   50% { filter: drop-shadow(0 0 8px var(--accent-rose-glow)); }
 }
+
+/* High-performance Collapsible Grid Accordion */
+.panel-collapse-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+}
+.panel-collapse-wrapper.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.panel-collapse-content {
+  overflow: hidden;
+}
+
+/* Mobile search drawer thumb-reach adjustments */
+@media (max-width: 767px) {
+  .search-header-container {
+    order: 1 !important;
+  }
+  .search-body-container {
+    order: 2 !important;
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+  .search-field-container {
+    order: 3 !important;
+    border-top: 1px solid var(--border-glass) !important;
+    background: var(--bg-secondary) !important;
+  }
+}
+
 

@@ -1,22 +1,38 @@
 import type { MealLog } from '../types/nutrition';
 
 /** Numeric nutrient fields shared by FoodItem-shaped records. */
-export const NUTRIENT_FIELDS = ['calories', 'protein', 'carbs', 'fat', 'sugar', 'addedSugar', 'fiber', 'sodium'] as const;
+export const NUTRIENT_FIELDS = [
+  'calories', 'protein', 'carbs', 'fat',
+  'sugar', 'addedSugar', 'fiber', 'sodium', 'iron',
+  'calcium', 'potassium', 'cholesterol', 'saturatedFat', 'transFat',
+  'vitaminA', 'vitaminC', 'vitaminD', 'vitaminB12', 'zinc', 'magnesium', 'folate'
+] as const;
 
 /**
  * Scale every present numeric nutrient field of a food-item-shaped record by a
- * factor. Calories/sodium round to integers; the rest keep one decimal. Any
- * non-numeric/absent field is left untouched, and a passed `id` is preserved.
+ * factor. Calories and integer micronutrients round to integers; the rest keep one decimal.
+ * Any non-numeric/absent field is left untouched, and a passed `id` is preserved.
  * Generic so it serves both FoodItem and Omit<FoodItem,'id'>.
  */
 export function scaleNutrients<T extends object>(item: T, factor: number): T {
-  const out = { ...item } as Record<string, unknown>;
+  const out = { ...item } as Record<string, any>;
   for (const k of NUTRIENT_FIELDS) {
     const v = out[k];
     if (typeof v === 'number') {
       const scaled = v * factor;
-      out[k] = k === 'calories' || k === 'sodium' ? Math.round(scaled) : Math.round(scaled * 10) / 10;
+      const isIntField = ['calories', 'sodium', 'potassium', 'calcium', 'cholesterol', 'magnesium'].includes(k);
+      out[k] = isIntField ? Math.round(scaled) : Math.round(scaled * 10) / 10;
     }
+  }
+  if (out.micros && typeof out.micros === 'object') {
+    const scaledMicros: Record<string, number> = {};
+    for (const k of Object.keys(out.micros)) {
+      const v = out.micros[k];
+      if (typeof v === 'number') {
+        scaledMicros[k] = Math.round(v * factor * 100) / 100;
+      }
+    }
+    out.micros = scaledMicros;
   }
   return out as unknown as T;
 }

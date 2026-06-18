@@ -82,11 +82,11 @@ describe('Dashboard', () => {
     expect(screen.getByText(/Dietary Fiber/)).toBeTruthy();
   });
 
-  it('shows "not auto-tracked" for a custom micro with no logged data (honesty)', () => {
-    const s: AppSettings = { ...settings, customMicros: [{ id: 'mk', name: 'Potassium', emoji: '🍌', unit: 'mg', dailyLimit: 3500, isLimit: false, color: 'var(--accent-blue)', glowColor: 'var(--accent-blue-glow)', fieldKey: 'potassium' }] };
+  it('shows progress bar for a custom micro even with no logged data (since all micros are dynamically auto-tracked)', () => {
+    const s: AppSettings = { ...settings, customMicros: [{ id: 'mk', name: 'Selenium', emoji: '🔬', unit: 'mcg', dailyLimit: 55, isLimit: false, color: 'var(--accent-blue)', glowColor: 'var(--accent-blue-glow)', fieldKey: 'selenium' }] };
     render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={s} onTriggerCustomize={() => {}} />);
-    expect(screen.getByText(/Potassium/)).toBeTruthy();
-    expect(screen.getByText(/Not auto-tracked from foods/i)).toBeTruthy();
+    expect(screen.getByText(/Selenium/)).toBeTruthy();
+    expect(screen.queryByText(/Not auto-tracked from foods/i)).toBeNull();
   });
 
   it('adds a custom micronutrient from the micros settings (offline, no key)', () => {

@@ -135,7 +135,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           width: '160px',
           height: '240px',
           position: 'relative',
-          borderRadius: '24px 24px 32px 32px',
+          borderRadius: 'var(--radius-xl) var(--radius-xl) var(--radius-pill) var(--radius-pill)',
           border: '3px solid rgba(255, 255, 255, 0.08)',
           background: 'rgba(255, 255, 255, 0.015)',
           boxShadow: 'inset 0 0 20px rgba(255, 255, 255, 0.05), 0 10px 30px rgba(0, 0, 0, 0.4)',
@@ -173,12 +173,17 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
         <div 
           className="liquid-filling-body"
           style={{
-            height: `${fillPercent}%`,
+            height: '100%',
             width: '100%',
+            transform: `scaleY(${fillPercent / 100})`,
+            transformOrigin: 'bottom',
             backgroundColor: 'var(--hydration-color)',
             boxShadow: '0 0 40px var(--hydration-color-glow)',
-            position: 'relative',
-            transition: 'height 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            transition: 'transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
             zIndex: 2
           }}
         >
@@ -485,7 +490,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           animation: wave-slide-2 8s linear infinite;
         }
         .beaker-splash {
-          animation: splash-scale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 1;
+          animation: splash-scale 0.6s cubic-bezier(0.16, 1, 0.3, 1) 1;
         }
         @keyframes splash-scale {
           0% { transform: scale(1); }
