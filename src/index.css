@@ -137,8 +137,8 @@ body.theme-emerald {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent-purple) var(--bg-primary);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 body {
@@ -156,19 +156,7 @@ body {
 
 /* Custom Webkit Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--bg-glass-thick);
-  border-radius: 99px;
-  border: 1px solid var(--bg-primary);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-purple);
+  display: none;
 }
 
 h1, h2, h3, h4, h5, h6 {
