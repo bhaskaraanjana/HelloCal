@@ -1,5 +1,13 @@
 # Internal Documentation
 
+## Version 1.0.85
+* **Date**: June 30, 2026
+* **Changes**:
+  * **Homepage Decluttering**:
+    * **Components**: [App.tsx](file:///c:/dev/HelloCal/src/App.tsx), [Dashboard.tsx](file:///c:/dev/HelloCal/src/components/Dashboard.tsx)
+    * **Action**: Removed Quick Start logging nudge card, Drag Handle tip text, and "Serverless & Private" reference in the footer.
+    * **Details**: Cleaned up the dashboard grid header to directly show the panels grid without cluttering layout guidelines. Simplified the footer text.
+
 ## Version 1.0.84
 * **Date**: June 30, 2026
 * **Changes**:

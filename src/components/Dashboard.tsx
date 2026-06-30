@@ -490,17 +490,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* First-log nudge (rendered outside the panel grid so it's always present). */}
-      {todayLogs.length === 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 1rem', borderRadius: '14px', background: 'rgba(139, 92, 246, 0.06)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}>
-          <Sparkles size={16} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
-          <span>Quick start: tap the mic, type a food, scan a barcode, or use Quick Add above to log your first meal.</span>
-        </div>
-      )}
-
-      <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-        <GripVertical size={12} /> Drag the handle (or focus it and press ↑/↓) to reorder · tap a title to collapse · ⚙ for per-panel settings
-      </p>
 
       <div className="dashboard-panel-grid">
         {visibleOrder.map((key) => {

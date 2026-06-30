@@ -1435,7 +1435,7 @@ export const App: React.FC = () => {
         justifyContent: 'center',
         gap: '0.4rem'
       }}>
-        <span>HelloCal 🟡 Serverless & Private. Made with</span>
+        <span>HelloCal · Made with</span>
         <Heart size={10} color="var(--accent-rose)" fill="var(--accent-rose)" />
         <span>for healthier days.</span>
       </footer>
