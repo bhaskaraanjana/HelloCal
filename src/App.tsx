@@ -17,11 +17,10 @@ const Analytics = React.lazy(() =>
 );
 import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
-import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, BookOpen } from 'lucide-react';
+import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, BookOpen, Flame } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
 import { HydrationTracker } from './components/HydrationTracker';
-import { StreakBadge } from './components/StreakBadge';
 import { QuickLogBar } from './components/QuickLogBar';
 // WeightTracker also pulls in Chart.js; lazy-load it alongside Analytics so the
 // charting library stays out of the initial bundle entirely.
@@ -1140,13 +1139,30 @@ export const App: React.FC = () => {
       
       {/* 1. Header Layout & Navigation Tabs */}
       <header className="header">
-        <div className="logo-container">
+        <div className="logo-container" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <img
             src="/logo.svg"
             alt="HelloCal Logo"
             className="header-logo"
           />
-          <h1 className="logo-text">Hello<span>Cal</span></h1>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h1 className="logo-text" style={{ margin: 0 }}>Hello<span>Cal</span></h1>
+            {streak > 0 && (
+              <div className="logo-streak-v3" style={{
+                display: 'flex',
+                fontSize: '0.68rem',
+                color: 'var(--text-muted)',
+                fontFamily: 'var(--font-display)',
+                fontWeight: 500,
+                alignItems: 'center',
+                gap: '0.2rem',
+                marginTop: '1px'
+              }}>
+                <Flame size={10} fill="var(--text-muted)" color="var(--text-muted)" />
+                <span>{streak}-day streak</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Dynamic Navigation Board */}
@@ -1200,9 +1216,6 @@ export const App: React.FC = () => {
       <main style={{ flex: 1, marginBottom: '3rem' }}>
         {activeTab === 'dashboard' && (
           <div role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {appSettings.visibleWidgets.streak !== false && (
-              <StreakBadge streak={streak} totalDays={lifetimeDays} />
-            )}
             <QuickLogBar
               favorites={favorites}
               onQuickLog={handleQuickLog}
