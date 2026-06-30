@@ -1,5 +1,13 @@
 # Internal Documentation
 
+## Version 1.0.83
+* **Date**: June 30, 2026
+* **Changes**:
+  * **Redesign Water Icon**:
+    * **Component**: [HydrationTracker.tsx](file:///c:/dev/HelloCal/src/components/HydrationTracker.tsx)
+    * **Action**: Replaced simple lucide Droplet icon with a custom glowing dual-layer SVG water droplet icon.
+    * **Details**: Added stroke drop-shadow neon aura filter matching the Obsidian Console design rules, and scaled with a secondary internal filled droplet indicator at 0.35 opacity.
+
 ## Version 1.0.82
 * **Date**: June 30, 2026
 * **Changes**:
