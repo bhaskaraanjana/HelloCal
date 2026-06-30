@@ -919,7 +919,10 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
             :scope .glass-beaker-wrapper {
               background: radial-gradient(circle at center, rgba(56, 189, 248, 0.03), transparent 75%), rgba(255, 255, 255, 0.01) !important;
               box-shadow: inset 0 0 35px rgba(56, 189, 248, 0.12), 0 12px 35px rgba(0, 0, 0, 0.5) !important;
-              border-radius: 40px !important;
+              border-radius: 12px 12px 24px 24px !important;
+              width: 124px !important;
+              height: 210px !important;
+              margin-top: 0px !important;
             }
             :scope .glass-beaker-wrapper span {
               filter: drop-shadow(0 0 8px var(--hydration-color));
@@ -980,9 +983,33 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
             </div>
           )}
 
-          {/* Main Beaker Frame & Animations */}
-          <div 
-            className={`glass-beaker-wrapper ${isSplashing ? 'beaker-splash' : ''}`}
+          {/* Water Bottle Structure (Cap, Collar, Body) */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '1.25rem', position: 'relative' }}>
+            {/* Bottle Cap */}
+            <div style={{
+              width: '40px',
+              height: '14px',
+              background: 'linear-gradient(90deg, #334155, #475569)',
+              border: '1.5px solid rgba(255, 255, 255, 0.15)',
+              borderBottom: 'none',
+              borderRadius: '6px 6px 0 0',
+              boxShadow: '0 0 10px rgba(56, 189, 248, 0.1)',
+              zIndex: 5
+            }} />
+            {/* Bottle Collar/Neck */}
+            <div style={{
+              width: '56px',
+              height: '8px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '2px solid rgba(255, 255, 255, 0.08)',
+              borderBottom: 'none',
+              borderRadius: '3px 3px 0 0',
+              zIndex: 4
+            }} />
+            
+            {/* Main Bottle Body */}
+            <div 
+              className={`glass-beaker-wrapper ${isSplashing ? 'beaker-splash' : ''}`}
             style={{
               width: '160px',
               height: '240px',
@@ -1137,6 +1164,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
               </span>
             </div>
 
+          </div>
           </div>
 
           {/* Goal achievement feedback pill */}

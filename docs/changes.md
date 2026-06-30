@@ -1,5 +1,13 @@
 # Internal Documentation
 
+## Version 1.0.84
+* **Date**: June 30, 2026
+* **Changes**:
+  * **Update Variant 2 (Water Bottle shape)**:
+    * **Component**: [HydrationTracker.tsx](file:///c:/dev/HelloCal/src/components/HydrationTracker.tsx)
+    * **Action**: Updated Variant 2 from an oval capsule beaker shape to a sleek sports water bottle structure.
+    * **Details**: Removed the `border-radius: 40px` and styled the container with flat-bottomed rounded corners (`border-radius: 12px 12px 24px 24px`), a linear-gradient dark slate bottle cap, and a translucent collar/neck piece.
+
 ## Version 1.0.83
 * **Date**: June 30, 2026
 * **Changes**:
