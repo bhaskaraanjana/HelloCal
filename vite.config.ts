@@ -6,6 +6,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Plugin } from 'vite'
 
+/** Remove impeccable live dev inject so production builds never load localhost:8400. */
+function stripImpeccableLiveInject(): Plugin {
+  return {
+    name: 'strip-impeccable-live-inject',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html.replace(
+        /<!--\s*impeccable-live-start\s*-->[\s\S]*?<!--\s*impeccable-live-end\s*-->/gi,
+        '',
+      );
+    },
+  };
+}
+
 /**
  * Rewrites the built dist/sw.js with (1) a content-hashed CACHE_NAME so every
  * content deploy ships a byte-changed service worker (the trigger that makes open
@@ -80,7 +94,7 @@ function hellocalServiceWorker(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), hellocalServiceWorker()],
+  plugins: [react(), stripImpeccableLiveInject(), hellocalServiceWorker()],
   test: {
     // Per-file `// @vitest-environment jsdom` opts component tests into a DOM;
     // service tests run on the faster default node env.
