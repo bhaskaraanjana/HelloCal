@@ -4,7 +4,6 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { HydrationTracker } from './HydrationTracker';
 import type { HydrationLog, UserGoals } from '../types/nutrition';
 
-// canvas-confetti touches a real <canvas> that jsdom can't render — stub it.
 vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 
 afterEach(cleanup);
@@ -23,46 +22,46 @@ const log = (over: Partial<HydrationLog>): HydrationLog => ({
 
 describe('HydrationTracker', () => {
   it('renders the beaker at 0% with no logs', () => {
-    render(<HydrationTracker logs={[]} goals={goals} onAddWater={() => {}} onRemoveWater={() => {}} />);
+    const { container } = render(<HydrationTracker logs={[]} goals={goals} onAddWater={() => {}} onRemoveWater={() => {}} />);
     expect(screen.getByText('0%')).toBeTruthy();
-    expect(screen.getByText(/0 \/ 2000 ml/)).toBeTruthy();
+    expect(screen.getByText(/of 2,000 ml goal/i)).toBeTruthy();
+    expect(container.querySelector('.hydration-tracker-amount')?.textContent).toMatch(/0\s*ml/);
   });
 
   it('sums only today\'s logs (ignores stale ones) and clamps the fill at 100%', () => {
     const stale = log({ amount: 9999, timestamp: Date.now() - 3 * 24 * 3600 * 1000 });
     const todayA = log({ amount: 1000 });
-    const todayB = log({ amount: 1500 }); // 2500 > 2000 target -> clamps to 100%
-    render(<HydrationTracker logs={[stale, todayA, todayB]} goals={goals} onAddWater={() => {}} onRemoveWater={() => {}} />);
-    expect(screen.getByText(/2500 \/ 2000 ml/)).toBeTruthy();
+    const todayB = log({ amount: 1500 });
+    const { container } = render(<HydrationTracker logs={[stale, todayA, todayB]} goals={goals} onAddWater={() => {}} onRemoveWater={() => {}} />);
+    expect(container.querySelector('.hydration-tracker-amount')?.textContent).toMatch(/2,500\s*ml/);
     expect(screen.getByText('100%')).toBeTruthy();
-    // Goal-met pill appears once the target is reached.
-    expect(screen.getByText(/DAILY HYDRATION HALO MET/i)).toBeTruthy();
+    expect(screen.getByText(/Daily goal met/i)).toBeTruthy();
   });
 
   it('quick-add buttons report the right amount', () => {
     const onAddWater = vi.fn();
     render(<HydrationTracker logs={[]} goals={goals} onAddWater={onAddWater} onRemoveWater={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: '250ml' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add 250ml/i }));
     expect(onAddWater).toHaveBeenCalledWith(250);
-    fireEvent.click(screen.getByRole('button', { name: '500ml' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add 500ml/i }));
     expect(onAddWater).toHaveBeenCalledWith(500);
   });
 
   it('removes the most recent log via the undo control', () => {
     const onRemoveWater = vi.fn();
-    const first = log({ amount: 250 });
-    const last = log({ amount: 500 });
+    const now = Date.now();
+    const first = log({ id: 'first', amount: 250, timestamp: now - 1000 });
+    const last = log({ id: 'last', amount: 500, timestamp: now });
     render(<HydrationTracker logs={[first, last]} goals={goals} onAddWater={() => {}} onRemoveWater={onRemoveWater} />);
     fireEvent.click(screen.getByTitle('Remove last log'));
-    expect(onRemoveWater).toHaveBeenCalledWith(last.id);
+    expect(onRemoveWater).toHaveBeenCalledWith('last');
   });
 
   it('logs a custom amount through the inline form', () => {
     const onAddWater = vi.fn();
     render(<HydrationTracker logs={[]} goals={goals} onAddWater={onAddWater} onRemoveWater={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Custom' }));
-    const input = screen.getByDisplayValue('250');
-    fireEvent.change(input, { target: { value: '333' } });
+    fireEvent.change(screen.getByDisplayValue('250'), { target: { value: '333' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(onAddWater).toHaveBeenCalledWith(333);
   });
@@ -70,7 +69,8 @@ describe('HydrationTracker', () => {
   it('falls back to a 2000ml default target when no hydration goal is set', () => {
     const { hydration, ...noHydration } = goals;
     void hydration;
-    render(<HydrationTracker logs={[log({ amount: 500 })]} goals={noHydration as UserGoals} onAddWater={() => {}} onRemoveWater={() => {}} />);
-    expect(screen.getByText(/500 \/ 2000 ml/)).toBeTruthy();
+    const { container } = render(<HydrationTracker logs={[log({ amount: 500 })]} goals={noHydration as UserGoals} onAddWater={() => {}} onRemoveWater={() => {}} />);
+    expect(container.querySelector('.hydration-tracker-amount')?.textContent).toMatch(/500\s*ml/);
+    expect(screen.getByText(/of 2,000 ml goal/i)).toBeTruthy();
   });
 });

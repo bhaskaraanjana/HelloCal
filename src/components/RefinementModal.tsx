@@ -5,6 +5,7 @@ import { localParser } from '../services/localParser';
 import { Trash2, Plus, Sparkles, Check, X, Mic, MicOff, Send, AlertCircle, Bookmark } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { scaleNutrients } from '../services/logMath';
+import { isAiReady, type AiAccess } from '../services/aiRuntime';
 
 interface RefinementModalProps {
   isOpen: boolean;
@@ -14,7 +15,7 @@ interface RefinementModalProps {
   logType: 'food' | 'workout' | 'mixed';
   onSave: (items: Omit<FoodItem, 'id'>[], workout: Omit<WorkoutLog, 'id'> | null, mealType?: MealSlot, timestamp?: number) => void;
   coachingMessage?: string;
-  apiKey: string;
+  aiAccess: AiAccess;
   personality: CoachPersonality;
   calorieGoal?: number;
   consumedToday?: number;
@@ -104,7 +105,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   logType,
   onSave,
   coachingMessage: initialCoaching,
-  apiKey,
+  aiAccess,
   personality,
   calorieGoal,
   consumedToday = 0,
@@ -121,6 +122,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   const [coaching, setCoaching] = useState('');
   const [modalLogType, setModalLogType] = useState<'food' | 'workout' | 'mixed'>('food');
   
+  const aiReady = isAiReady(aiAccess);
+
   // Correction States
   const [corrStatus, setCorrStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [corrInput, setCorrInput] = useState('');
@@ -328,14 +331,14 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
   };
 
   const processVoiceCorrection = async (blob: Blob) => {
-    if (!apiKey) {
+    if (!aiReady) {
       setCorrStatus('idle');
       setCorrError('Gemini API key required for voice corrections.');
       return;
     }
 
     try {
-      const res = await gemini.correctVoice(items, workout, blob, apiKey, personality, weightKg);
+      const res = await gemini.correctVoice(items, workout, blob, aiAccess, personality, weightKg);
       setItems(res.items || []);
       if (res.workout) setWorkout(res.workout);
       if (res.type) setModalLogType(res.type);
@@ -359,8 +362,8 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
     setCorrError(null);
 
     try {
-      if (apiKey) {
-        const res = await gemini.correctText(items, workout, query, apiKey, personality, weightKg);
+      if (aiReady) {
+        const res = await gemini.correctText(items, workout, query, aiAccess, personality, weightKg);
         setItems(res.items || []);
         if (res.workout) setWorkout(res.workout);
         if (res.type) setModalLogType(res.type);
@@ -1100,7 +1103,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                 aria-label="Type a correction or command"
                 value={corrInput}
                 onChange={(e) => setCorrInput(e.target.value)}
-                placeholder={apiKey ? "Speak/type corrections (e.g. 'remove the eggs, make yogurt double portion')..." : "Type changes (offline commands support 'remove yogurt', etc)..."}
+                placeholder={aiReady ? "Speak/type corrections (e.g. 'remove the eggs, make yogurt double portion')..." : "Type changes (offline commands support 'remove yogurt', etc)..."}
                 disabled={corrStatus === 'processing'}
                 style={{
                   width: '100%',
@@ -1114,7 +1117,7 @@ export const RefinementModal: React.FC<RefinementModalProps> = ({
                 }}
               />
               {/* Mic Icon within input for corrections */}
-              {apiKey && (
+              {aiReady && (
                 <button
                   type="button"
                   onClick={corrStatus === 'recording' ? stopRecording : startRecording}

@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import type { MealLog, WorkoutLog, UserGoals, FoodItem, CustomMicro } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, FoodItem, CustomMicro, CoachPersonality, CoachResponse } from '../types/nutrition';
+import { logTimestampForDate } from '../services/logMath';
+import { readFoodItemNutrient, canonicalMicroFieldKey } from '../services/nutrientValue';
+import { VoiceInput } from './VoiceInput';
 import {
   Trash2,
   CalendarRange,
@@ -14,10 +17,8 @@ import {
   Activity,
   Pencil,
   CopyPlus,
-  Mic,
-  Camera,
-  Keyboard
 } from 'lucide-react';
+import type { AiAccess } from '../services/aiRuntime';
 import { EmptyState } from './ui/EmptyState';
 
 interface MicroFieldConfig {
@@ -44,6 +45,12 @@ const ADDITIONAL_MICROS: MicroFieldConfig[] = [
   { key: 'folate', label: 'Folate', unit: 'mcg', color: 'var(--accent-purple)' }
 ];
 
+function formatMicroAmount(value: number, unit: string): string {
+  if (unit === 'mg') return String(Math.round(value));
+  if (unit === 'mcg') return String(Math.round(value * 10) / 10);
+  return String(Math.round(value * 10) / 10);
+}
+
 interface FoodTimelineProps {
   logs: MealLog[];
   workouts?: WorkoutLog[];
@@ -55,9 +62,35 @@ interface FoodTimelineProps {
   onScaleItem?: (logId: string, itemId: string, factor: number) => void;
   goals?: UserGoals;
   customMicros?: CustomMicro[];
+  aiAccess?: AiAccess;
+  personality?: CoachPersonality;
+  onLoggingSuccess?: (response: CoachResponse, logTimestamp?: number) => void;
+  onError?: (message: string) => void;
+  onOpenSettings?: () => void;
+  weightKg?: number;
+  /** When set, jumps the calendar to this local day (e.g. from Analytics drill-down). */
+  focusDateTs?: number | null;
 }
 
-export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [], onDeleteLog, onDeleteWorkout, onEditLog, onCopyDay, onCopyMeal, onScaleItem, goals, customMicros }) => {
+export const FoodTimeline: React.FC<FoodTimelineProps> = ({
+  logs,
+  workouts = [],
+  onDeleteLog,
+  onDeleteWorkout,
+  onEditLog,
+  onCopyDay,
+  onCopyMeal,
+  onScaleItem,
+  goals,
+  customMicros,
+  aiAccess = { provider: 'custom', customApiKey: '', cloudSignedIn: false },
+  personality = 'encouraging',
+  onLoggingSuccess,
+  onError,
+  onOpenSettings,
+  weightKg,
+  focusDateTs,
+}) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'feed'>('calendar');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -71,6 +104,15 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
     return d;
   });
   const [expandedFoodKey, setExpandedFoodKey] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (focusDateTs == null) return;
+    const d = new Date(focusDateTs);
+    d.setHours(0, 0, 0, 0);
+    setSelectedDate(d);
+    setCurrentMonth(new Date(d));
+    setViewMode('calendar');
+  }, [focusDateTs]);
 
   const toggleFoodExpand = (key: string) => {
     setExpandedFoodKey(expandedFoodKey === key ? null : key);
@@ -307,7 +349,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
   };
 
   return (
-    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1 }}>
+    <div className="glass-card motion-enter" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1 }}>
       
       {/* 1. Header Toggles (Calendar Mode vs Feed Mode) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -591,6 +633,22 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
         </div>
       )}
 
+      {/* Log console for the selected calendar day */}
+      {viewMode === 'calendar' && onLoggingSuccess && onError && (
+        <section className="motion-stagger" style={{ display: 'flex', justifyContent: 'center', '--i': 0 } as React.CSSProperties}>
+          <VoiceInput
+            aiAccess={aiAccess}
+            personality={personality}
+            onParsingSuccess={(response) =>
+              onLoggingSuccess(response, logTimestampForDate(selectedDate))
+            }
+            onError={onError}
+            onOpenSettings={onOpenSettings}
+            weightKg={weightKg}
+          />
+        </section>
+      )}
+
       {/* 4. Logs Feed list (shared between date filters and feed view) */}
       <div style={{
         display: 'flex',
@@ -613,13 +671,9 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               icon={<Activity size={26} />}
               title="No activity logged for this day"
               subtitle={viewMode === 'calendar'
-                ? 'Log your first meal or workout using the console above — by voice, photo, or text.'
-                : 'Your activity history is currently clear.'}
-              actions={viewMode === 'calendar' ? [
-                { icon: <Mic size={20} />, label: 'Voice', hint: '~5 sec' },
-                { icon: <Camera size={20} />, label: 'Photo', hint: '~3 sec' },
-                { icon: <Keyboard size={20} />, label: 'Type', hint: 'anytime' },
-              ] : undefined}
+                ? 'Log a meal for this day using the console above.'
+                : 'Switch to Calendar view to log by day, or browse your full history here.'}
+              actions={undefined}
             />
             {viewMode === 'calendar' && !isSameDay(selectedDate.getTime(), new Date().getTime()) && (
               <button 
@@ -637,7 +691,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
             )}
           </div>
         ) : (
-          filteredTimeline.map((timelineItem) => {
+          filteredTimeline.map((timelineItem, timelineIndex) => {
             if (timelineItem.type === 'food') {
               const log = timelineItem.item as MealLog;
               const mealCals = log.items.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
@@ -645,23 +699,26 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               const mealCarbs = log.items.reduce((sum, item) => sum + (Number(item.carbs) || 0), 0);
               const mealFat = log.items.reduce((sum, item) => sum + (Number(item.fat) || 0), 0);
 
-              const mealAddedSugar = log.items.reduce((sum, item) => sum + (Number(item.addedSugar) || 0), 0);
-              const mealFiber = log.items.reduce((sum, item) => sum + (Number(item.fiber) || 0), 0);
-              const mealSodium = log.items.reduce((sum, item) => sum + (Number(item.sodium) || 0), 0);
-
               const mealMicrosMap: Record<string, number> = {};
-              log.items.forEach(item => {
-                ADDITIONAL_MICROS.forEach(micro => {
-                  const val = Number(item[micro.key]);
+              const trackedMicros = (customMicros ?? []).filter((m) => !m.hidden);
+              log.items.forEach((item) => {
+                trackedMicros.forEach((micro) => {
+                  const key = canonicalMicroFieldKey(micro.fieldKey);
+                  const val = readFoodItemNutrient(item, key);
+                  if (val > 0) mealMicrosMap[key] = (mealMicrosMap[key] || 0) + val;
+                });
+                ADDITIONAL_MICROS.forEach((micro) => {
+                  const val = readFoodItemNutrient(item, String(micro.key));
                   if (val > 0) {
-                    mealMicrosMap[micro.key] = (mealMicrosMap[micro.key] || 0) + val;
+                    mealMicrosMap[String(micro.key)] = (mealMicrosMap[String(micro.key)] || 0) + val;
                   }
                 });
                 if (item.micros) {
                   Object.entries(item.micros).forEach(([mKey, val]) => {
                     const numVal = Number(val);
                     if (numVal > 0) {
-                      mealMicrosMap[mKey] = (mealMicrosMap[mKey] || 0) + numVal;
+                      const key = canonicalMicroFieldKey(mKey);
+                      mealMicrosMap[key] = (mealMicrosMap[key] || 0) + numVal;
                     }
                   });
                 }
@@ -672,17 +729,18 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               return (
                 <div 
                   key={log.id} 
-                  className="glass-card" 
-                  onClick={() => toggleFoodExpand(log.id)}
+                  className="glass-card motion-stagger"
                   style={{ 
+                    '--i': timelineIndex,
                     padding: '1.1rem', 
                     borderRadius: '16px',
                     backgroundColor: 'rgba(255,255,255,0.012)',
                     border: '1px solid rgba(255,255,255,0.035)',
                     boxShadow: 'none',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease-in-out'
-                  }}
+                    transition: 'var(--transition-smooth)'
+                  } as React.CSSProperties}
+                  onClick={() => toggleFoodExpand(log.id)}
                 >
                   {/* Meal Header */}
                   <div style={{
@@ -878,42 +936,89 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                         </div>
 
                         {/* Collapsible item-level micronutrients */}
-                        {isExpanded && (
-                          <div style={{
-                            display: 'flex',
-                            gap: '0.5rem',
-                            fontSize: '0.7rem',
-                            color: 'var(--text-secondary)',
-                            borderTop: '1px dashed rgba(255,255,255,0.04)',
-                            paddingTop: '0.3rem',
-                            marginTop: '0.1rem',
-                            fontFamily: 'var(--font-display)'
-                          }}>
-                            <span>🍭 Added Sugar: <strong style={{ color: 'var(--accent-rose)' }}>{item.addedSugar !== undefined ? item.addedSugar : 0}g</strong></span>
-                            <span style={{ opacity: 0.3 }}>•</span>
-                            <span>🌿 Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{item.fiber !== undefined ? item.fiber : 0}g</strong></span>
-                            <span style={{ opacity: 0.3 }}>•</span>
-                            <span>🧂 Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{item.sodium !== undefined ? item.sodium : 0}mg</strong></span>
-                            {ADDITIONAL_MICROS.filter(m => item[m.key] !== undefined && (item[m.key] as number) > 0).map(micro => (
-                              <React.Fragment key={micro.key}>
-                                <span style={{ opacity: 0.3 }}>•</span>
-                                <span>{micro.label}: <strong style={{ color: micro.color }}>{(item as any)[micro.key]}{micro.unit}</strong></span>
-                              </React.Fragment>
-                            ))}
-                            {item.micros && Object.entries(item.micros).filter(([_, val]) => val > 0).map(([mKey, val]) => {
-                              const custom = customMicros?.find(c => c.fieldKey === mKey);
+                        {isExpanded && (() => {
+                          const tracked = (customMicros ?? []).filter((m) => !m.hidden);
+                          const shownKeys = new Set<string>();
+                          const chips: React.ReactNode[] = [];
+
+                          tracked.forEach((micro) => {
+                            const key = canonicalMicroFieldKey(micro.fieldKey);
+                            shownKeys.add(key);
+                            const val = readFoodItemNutrient(item, key);
+                            chips.push(
+                              <span key={`tracked-${micro.id}`}>
+                                {micro.emoji} {micro.name}:{' '}
+                                <strong style={{ color: micro.color }}>
+                                  {formatMicroAmount(val, micro.unit)}
+                                  {micro.unit}
+                                </strong>
+                              </span>
+                            );
+                          });
+
+                          ADDITIONAL_MICROS.forEach((micro) => {
+                            const key = String(micro.key);
+                            if (shownKeys.has(key)) return;
+                            const val = readFoodItemNutrient(item, key);
+                            if (val <= 0) return;
+                            shownKeys.add(key);
+                            chips.push(
+                              <span key={key}>
+                                {micro.label}:{' '}
+                                <strong style={{ color: micro.color }}>
+                                  {formatMicroAmount(val, micro.unit)}
+                                  {micro.unit}
+                                </strong>
+                              </span>
+                            );
+                          });
+
+                          if (item.micros) {
+                            Object.entries(item.micros).forEach(([mKey, val]) => {
+                              const key = canonicalMicroFieldKey(mKey);
+                              if (shownKeys.has(key) || val <= 0) return;
+                              shownKeys.add(key);
+                              const custom = customMicros?.find((c) => canonicalMicroFieldKey(c.fieldKey) === key);
                               const label = custom ? `${custom.emoji} ${custom.name}` : mKey.charAt(0).toUpperCase() + mKey.slice(1);
-                              const unit = custom ? custom.unit : 'mg';
-                              const color = custom ? custom.color : 'var(--text-secondary)';
-                              return (
-                                <React.Fragment key={mKey}>
-                                  <span style={{ opacity: 0.3 }}>•</span>
-                                  <span>{label}: <strong style={{ color }}>{val}{unit}</strong></span>
-                                </React.Fragment>
+                              const unit = custom?.unit ?? 'mg';
+                              const color = custom?.color ?? 'var(--text-secondary)';
+                              chips.push(
+                                <span key={key}>
+                                  {label}: <strong style={{ color }}>{formatMicroAmount(val, unit)}{unit}</strong>
+                                </span>
                               );
-                            })}
-                          </div>
-                        )}
+                            });
+                          }
+
+                          if (chips.length === 0) {
+                            return (
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                                No micronutrient data for this item.
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '0.5rem',
+                              fontSize: '0.7rem',
+                              color: 'var(--text-secondary)',
+                              borderTop: '1px dashed rgba(255,255,255,0.04)',
+                              paddingTop: '0.3rem',
+                              marginTop: '0.1rem',
+                              fontFamily: 'var(--font-display)',
+                            }}>
+                              {chips.map((chip, i) => (
+                                <React.Fragment key={i}>
+                                  {i > 0 && <span style={{ opacity: 0.3 }}>•</span>}
+                                  {chip}
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          );
+                        })()}
 
                         {/* Inline portion adjust — scale a logged item without reopening the modal. */}
                         {isExpanded && onScaleItem && (
@@ -967,6 +1072,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                   {isExpanded && (
                     <div style={{
                       display: 'flex',
+                      flexWrap: 'wrap',
                       justifyContent: 'flex-end',
                       gap: '0.75rem',
                       fontSize: '0.7rem',
@@ -975,21 +1081,30 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                       borderTop: '1px solid rgba(255,255,255,0.03)',
                       paddingTop: '0.4rem',
                       fontFamily: 'var(--font-display)',
-                      fontWeight: 600
+                      fontWeight: 600,
                     }}>
-                      <span>Added Sugar: <strong style={{ color: 'var(--accent-rose)' }}>{mealAddedSugar}g</strong></span>
-                      <span>Fiber: <strong style={{ color: 'var(--accent-teal)' }}>{mealFiber}g</strong></span>
-                      <span>Sodium: <strong style={{ color: 'var(--accent-amber)' }}>{mealSodium}mg</strong></span>
+                      {trackedMicros.map((micro) => {
+                        const key = canonicalMicroFieldKey(micro.fieldKey);
+                        const val = mealMicrosMap[key] ?? 0;
+                        return (
+                          <span key={micro.id}>
+                            {micro.emoji} {micro.name}:{' '}
+                            <strong style={{ color: micro.color }}>
+                              {formatMicroAmount(val, micro.unit)}
+                              {micro.unit}
+                            </strong>
+                          </span>
+                        );
+                      })}
                       {Object.entries(mealMicrosMap).map(([mKey, val]) => {
-                        if (mKey === 'addedSugar' || mKey === 'fiber' || mKey === 'sodium') return null;
-                        const addMicro = ADDITIONAL_MICROS.find(m => m.key === mKey);
-                        const custom = customMicros?.find(c => c.fieldKey === mKey);
+                        if (trackedMicros.some((m) => canonicalMicroFieldKey(m.fieldKey) === mKey)) return null;
+                        const addMicro = ADDITIONAL_MICROS.find((m) => String(m.key) === mKey);
+                        const custom = customMicros?.find((c) => canonicalMicroFieldKey(c.fieldKey) === mKey);
                         const label = addMicro ? addMicro.label : (custom ? `${custom.emoji} ${custom.name}` : mKey.charAt(0).toUpperCase() + mKey.slice(1));
                         const unit = addMicro ? addMicro.unit : (custom ? custom.unit : 'mg');
                         const color = addMicro ? addMicro.color : (custom ? custom.color : 'var(--text-secondary)');
-                        const isInteger = ['calcium', 'potassium', 'cholesterol', 'magnesium'].includes(mKey);
-                        const displayVal = isInteger ? Math.round(val) : Math.round(val * 10) / 10;
-                        if (displayVal <= 0) return null;
+                        const displayVal = formatMicroAmount(val, unit);
+                        if (Number(val) <= 0) return null;
                         return (
                           <React.Fragment key={mKey}>
                             <span style={{ opacity: 0.3 }}>•</span>
@@ -1008,8 +1123,9 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
               return (
                 <div 
                   key={w.id} 
-                  className="glass-card" 
+                  className="glass-card motion-stagger"
                   style={{ 
+                    '--i': timelineIndex,
                     padding: '1.1rem', 
                     borderRadius: '16px',
                     border: '1px solid rgba(6, 182, 212, 0.2)',
@@ -1018,7 +1134,7 @@ export const FoodTimeline: React.FC<FoodTimelineProps> = ({ logs, workouts = [],
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.6rem'
-                  }}
+                  } as React.CSSProperties}
                 >
                   {/* Workout Header */}
                   <div style={{

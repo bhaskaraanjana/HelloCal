@@ -1,0 +1,12 @@
+# Linked Supabase project (csybxucdwidbibltmvwg)
+# Use with Supabase CLI: supabase link --project-ref csybxucdwidbibltmvwg
+
+project_id = "csybxucdwidbibltmvwg"
+
+[auth]
+site_url = "https://hellocal.infinitemind.space"
+additional_redirect_urls = [
+  "https://hellocal.infinitemind.space",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]

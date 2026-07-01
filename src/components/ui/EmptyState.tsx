@@ -22,6 +22,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => {
   return (
     <div
+      className="motion-enter"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -93,8 +94,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           {actions.map((action, index) => (
             <div
               key={`${action.label}-${index}`}
-              className="glass-card"
+              className="glass-card motion-stagger"
               style={{
+                '--i': index,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -104,7 +106,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                 borderRadius: '14px',
                 minWidth: '88px',
                 flex: '0 1 110px'
-              }}
+              } as React.CSSProperties}
             >
               <span
                 style={{

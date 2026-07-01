@@ -48,6 +48,8 @@ export interface UserGoals {
   protein: number;
   carbs: number;
   fat: number;
+  saturatedFat?: number; // limit in grams
+  transFat?: number;     // limit in grams
   addedSugar?: number; // target limit in grams
   fiber?: number;      // target intake in grams
   sodium?: number;     // target limit in milligrams
@@ -83,6 +85,20 @@ export interface FavoriteFood {
   addedSugar?: number;
   fiber?: number;
   sodium?: number;
+  iron?: number;
+  calcium?: number;
+  potassium?: number;
+  cholesterol?: number;
+  saturatedFat?: number;
+  transFat?: number;
+  vitaminA?: number;
+  vitaminC?: number;
+  vitaminD?: number;
+  vitaminB12?: number;
+  zinc?: number;
+  magnesium?: number;
+  folate?: number;
+  micros?: Record<string, number>;
   frequency: number;    // how many times logged (for recents ranking)
   lastLogged: number;   // timestamp
   pinned?: boolean;     // explicitly marked favorite
@@ -117,7 +133,11 @@ export interface AppSettings {
     protein: boolean;
     carbs: boolean;
     fat: boolean;
+    saturatedFat?: boolean;
+    transFat?: boolean;
   };
+  /** true = limit (stay under), false = target (reach). Per-macro; defaults from catalog when absent. */
+  macroIsLimit?: Partial<Record<'protein' | 'carbs' | 'fat' | 'saturatedFat' | 'transFat', boolean>>;
   visibleMicros: {
     addedSugar: boolean;
     fiber: boolean;
@@ -140,6 +160,8 @@ export interface AppSettings {
   };
   reminders?: MealReminders;
   supplementReminders?: SupplementReminders;
+  /** HelloCal-hosted AI (requires sign-in) vs user's own Gemini API key. */
+  aiProvider?: 'hosted' | 'custom';
   // Per-panel display options (ultra-customisable dashboard panels)
   showBurnBreakdown?: boolean;   // calorieHalo: show "Base + Burn" subline
   showMealBreakdown?: boolean;   // mealSlots: show B/L/D/S chips

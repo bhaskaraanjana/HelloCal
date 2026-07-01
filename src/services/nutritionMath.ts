@@ -5,6 +5,22 @@ export const LB_PER_KG = 2.2046226218;
 export const kgToLb = (kg: number): number => kg * LB_PER_KG;
 export const lbToKg = (lb: number): number => lb / LB_PER_KG;
 
+export const CM_PER_IN = 2.54;
+
+export const cmToFeetInches = (cm: number): { feet: number; inches: number } => {
+  const totalIn = cm / CM_PER_IN;
+  let feet = Math.floor(totalIn / 12);
+  let inches = Math.round(totalIn % 12);
+  if (inches === 12) {
+    feet += 1;
+    inches = 0;
+  }
+  return { feet, inches };
+};
+
+export const feetInchesToCm = (feet: number, inches: number): number =>
+  (feet * 12 + inches) * CM_PER_IN;
+
 export const ACTIVITY_FACTORS: Record<ActivityLevel, number> = {
   sedentary: 1.2,
   light: 1.375,

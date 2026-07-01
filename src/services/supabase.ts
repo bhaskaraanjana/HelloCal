@@ -11,6 +11,14 @@ export function isSupabaseConfigured(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
+export function getSupabaseUrl(): string {
+  return SUPABASE_URL as string;
+}
+
+export function getSupabaseAnonKey(): string {
+  return SUPABASE_ANON_KEY as string;
+}
+
 let clientPromise: Promise<SupabaseClient> | null = null;
 
 /**
@@ -23,7 +31,7 @@ export async function getSupabase(): Promise<SupabaseClient | null> {
   if (!clientPromise) {
     clientPromise = import('@supabase/supabase-js').then(({ createClient }) =>
       createClient(SUPABASE_URL as string, SUPABASE_ANON_KEY as string, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
       })
     );
   }

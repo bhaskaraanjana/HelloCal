@@ -14,10 +14,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('panels render with drag handles and settings cogs', async ({ page }) => {
+test('panels render with settings cogs and are reorderable', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('[data-panel-key="calorieHalo"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Drag .* panel/ })).toHaveCount(6);
+  await expect(page.locator('[data-panel-key="water"]')).toBeVisible();
+  await expect(page.locator('[data-panel-key="supplements"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: /settings$/ })).toHaveCount(5);
+  await expect(page.getByLabelText(/Today's Calories panel/i)).toBeVisible();
 });
 
 test('collapsing a panel persists across reload', async ({ page }) => {
@@ -52,20 +55,20 @@ test('micros panel is ultra-customisable: add a custom micronutrient', async ({ 
   }).toContain('"fieldKey":"iron"');
 });
 
-test('drag handle reorders panels (pointer events — works on touch too)', async ({ page }) => {
+test('holding and dragging a panel reorders it (pointer events — works on touch too)', async ({ page }) => {
   await page.goto('/');
-  const handle = page.getByRole('button', { name: 'Drag Daily Halo panel' });
+  const panel = page.locator('[data-panel-key="calorieHalo"]');
   const macros = page.locator('[data-panel-key="macros"]');
-  const hb = await handle.boundingBox();
+  const pb = await panel.boundingBox();
   const mb = await macros.boundingBox();
-  expect(hb && mb).toBeTruthy();
-  await page.mouse.move(hb!.x + hb!.width / 2, hb!.y + hb!.height / 2);
+  expect(pb && mb).toBeTruthy();
+  // Drag from the panel body (non-button area) so settings/collapse taps are unaffected.
+  await page.mouse.move(pb!.x + pb!.width / 2, pb!.y + pb!.height * 0.55);
   await page.mouse.down();
-  await page.waitForTimeout(200); // arm the long-press
+  await page.waitForTimeout(200); // arm the hold-to-drag
   await page.mouse.move(mb!.x + mb!.width / 2, mb!.y + mb!.height / 2, { steps: 12 });
   await page.waitForTimeout(280); // clear the swap throttle
   await page.mouse.up();
-  // Order changed and calorieHalo is no longer first.
   await expect.poll(async () => {
     return await page.evaluate(() => localStorage.getItem('hellocal_dashboard_order') || '');
   }).not.toContain('["calorieHalo"');

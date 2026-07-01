@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
+    "seed:analytics": "vitest run src/services/analyticsSeed.plant.test.ts",
     "preview": "vite preview",
     "cap:sync": "npm run build && cap sync",
     "android": "npm run build && cap sync android && cap open android",

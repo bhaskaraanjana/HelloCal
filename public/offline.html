@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>HelloCal — Offline</title>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@600;800&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Outfit:wght@600;800&display=swap');
 
       :root {
         color-scheme: dark;
@@ -14,9 +14,15 @@
         --text-secondary: #aab6c7;
         --text-muted: #7e8ca1;
         --accent-purple: #8b5cf6;
+        --accent-purple-hover: #7c3aed;
+        --accent-purple-glow: rgba(139, 92, 246, 0.4);
+        --accent-purple-glow-hover: rgba(139, 92, 246, 0.6);
         --border-glass: rgba(255, 255, 255, 0.06);
+        --shadow-color-light: rgba(0, 0, 0, 0.3);
         --font-display: 'Outfit', sans-serif;
-        --font-body: 'Inter', sans-serif;
+        --font-body: 'DM Sans', sans-serif;
+        --radius-md: 12px;
+        --radius-lg: 20px;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -39,9 +45,9 @@
       .logo {
         width: 80px;
         height: 80px;
-        border-radius: 20px;
+        border-radius: var(--radius-lg);
         border: 1px solid var(--border-glass);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 8px 32px var(--shadow-color-light);
       }
       h1 {
         font-family: var(--font-display);
@@ -49,9 +55,11 @@
         font-weight: 800;
         letter-spacing: -0.03em;
         margin-top: 0.5rem;
-        background: linear-gradient(to right, var(--text-primary), var(--accent-purple));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: var(--text-primary);
+        text-wrap: balance;
+      }
+      h1 span {
+        color: var(--accent-purple);
       }
       p {
         color: var(--text-secondary);
@@ -68,14 +76,14 @@
         font-size: 1rem;
         font-weight: 600;
         padding: 0.8rem 2rem;
-        border-radius: 12px;
+        border-radius: var(--radius-md);
         cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        box-shadow: 0 4px 15px var(--accent-purple-glow);
       }
       button:hover {
-        background: #7c3aed;
-        box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+        background: var(--accent-purple-hover);
+        box-shadow: 0 6px 20px var(--accent-purple-glow-hover);
         transform: translateY(-1px);
       }
       button:active {
@@ -93,7 +101,7 @@
   </head>
   <body>
     <img class="logo" src="/favicon.png" alt="HelloCal" onerror="this.style.display='none'" />
-    <h1>You're offline</h1>
+    <h1>You're <span>offline</span></h1>
     <p>HelloCal needs an internet connection to load for the first time. Once loaded, your logged data is stored privately on this device and can be accessed offline.</p>
     <button onclick="location.reload()">Try again</button>
     <p class="note">HelloCal • Serverless &amp; Private</p>

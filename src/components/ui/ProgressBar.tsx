@@ -23,7 +23,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   return (
     <div style={{ marginBottom: '1rem', width: '100%' }}>
       {/* Labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontFamily: 'var(--font-display)', fontSize: '0.9rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontFamily: 'var(--font-display)', fontSize: '0.9rem', lineHeight: 1.35 }}>
         <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
         <span style={{ marginLeft: 'auto', color: 'var(--text-primary)', fontWeight: 600 }}>
           {Math.round(value)}{unit} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ {max}{unit}</span>

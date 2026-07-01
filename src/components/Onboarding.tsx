@@ -7,6 +7,8 @@ import {
   GOAL_LABELS,
   kgToLb,
   lbToKg,
+  cmToFeetInches,
+  feetInchesToCm,
 } from '../services/nutritionMath';
 import type {
   UserProfile,
@@ -66,9 +68,20 @@ const Onboarding: React.FC<OnboardingProps> = ({
   const [age, setAge] = useState<string>(
     initialProfile.age != null ? String(initialProfile.age) : ''
   );
-  const [heightCm, setHeightCm] = useState<string>(
-    initialProfile.heightCm != null ? String(initialProfile.heightCm) : ''
+  const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
+  const [heightCmInput, setHeightCmInput] = useState<string>(() =>
+    initialProfile.heightCm != null ? String(Math.round(initialProfile.heightCm)) : ''
   );
+  const [heightFtInput, setHeightFtInput] = useState<string>(() => {
+    if (initialProfile.heightCm == null) return '';
+    const { feet } = cmToFeetInches(initialProfile.heightCm);
+    return String(feet);
+  });
+  const [heightInInput, setHeightInInput] = useState<string>(() => {
+    if (initialProfile.heightCm == null) return '';
+    const { inches } = cmToFeetInches(initialProfile.heightCm);
+    return String(inches);
+  });
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lb'>(
     initialProfile.preferredWeightUnit ?? 'kg'
   );
@@ -92,15 +105,26 @@ const Onboarding: React.FC<OnboardingProps> = ({
     return weightUnit === 'lb' ? lbToKg(raw) : raw;
   }, [weightInput, weightUnit]);
 
+  const resolvedHeightCm = useMemo<number | undefined>(() => {
+    if (heightUnit === 'cm') {
+      const raw = parseFloat(heightCmInput);
+      return Number.isFinite(raw) && raw > 0 ? raw : undefined;
+    }
+    const ft = parseInt(heightFtInput, 10);
+    const inches = parseInt(heightInInput, 10);
+    if (!Number.isFinite(ft) || ft < 0) return undefined;
+    const inVal = Number.isFinite(inches) && inches >= 0 ? inches : 0;
+    const cm = feetInchesToCm(ft, inVal);
+    return cm > 0 ? Math.round(cm * 10) / 10 : undefined;
+  }, [heightUnit, heightCmInput, heightFtInput, heightInInput]);
+
   const draftProfile = useMemo<UserProfile>(() => {
     const parsedAge = parseInt(age, 10);
-    const parsedHeight = parseFloat(heightCm);
     return {
       ...initialProfile,
       sex,
       age: Number.isFinite(parsedAge) && parsedAge > 0 ? parsedAge : undefined,
-      heightCm:
-        Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined,
+      heightCm: resolvedHeightCm,
       weightKg,
       activityLevel,
       goalDirection,
@@ -110,7 +134,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
     initialProfile,
     sex,
     age,
-    heightCm,
+    resolvedHeightCm,
     weightKg,
     activityLevel,
     goalDirection,
@@ -124,13 +148,70 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   const handleSwitchUnit = (next: 'kg' | 'lb') => {
     if (next === weightUnit) return;
-    // Preserve the canonical kg value, re-expressing it in the new unit.
     if (weightKg != null) {
       const val = next === 'lb' ? kgToLb(weightKg) : weightKg;
       setWeightInput(String(Math.round(val * 10) / 10));
     }
     setWeightUnit(next);
   };
+
+  const handleSwitchHeightUnit = (next: 'cm' | 'ft') => {
+    if (next === heightUnit) return;
+    if (resolvedHeightCm != null) {
+      if (next === 'ft') {
+        const { feet, inches } = cmToFeetInches(resolvedHeightCm);
+        setHeightFtInput(String(feet));
+        setHeightInInput(String(inches));
+      } else {
+        setHeightCmInput(String(Math.round(resolvedHeightCm)));
+      }
+    }
+    setHeightUnit(next);
+  };
+
+  const unitToggle = (options: readonly string[], active: string, onSelect: (v: string) => void, ariaLabel: string) => (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      style={{
+        display: 'flex',
+        borderRadius: '12px',
+        border: '1px solid var(--border-glass)',
+        overflow: 'hidden',
+        flexShrink: 0,
+        alignSelf: 'stretch',
+      }}
+    >
+      {options.map((u) => (
+        <button
+          key={u}
+          type="button"
+          onClick={() => onSelect(u)}
+          aria-pressed={active === u}
+          style={{
+            flex: 1,
+            minWidth: '3.25rem',
+            padding: '0.8rem 1rem',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 600,
+            fontSize: '0.9rem',
+            lineHeight: 1,
+            transition: 'var(--transition-smooth)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: active === u ? 'var(--accent-purple)' : 'rgba(255,255,255,0.03)',
+            color: active === u ? 'var(--text-primary)' : 'var(--text-secondary)',
+            boxShadow: active === u ? '0 0 12px var(--accent-purple-glow)' : 'none',
+          }}
+        >
+          {u}
+        </button>
+      ))}
+    </div>
+  );
 
   const handleBuildPlan = () => {
     if (!derivedGoals) return;
@@ -216,42 +297,40 @@ const Onboarding: React.FC<OnboardingProps> = ({
               <User size={15} color="var(--accent-purple)" /> About you
             </div>
 
-            {/* Sex toggle */}
-            <div className="input-group">
-              <label className="input-label">Sex</label>
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setSex('male')}
-                  aria-pressed={sex === 'male'}
-                  style={{
-                    ...toggleBtnBase,
-                    ...(sex === 'male'
-                      ? activeToggle('var(--accent-blue)', 'var(--accent-blue-glow)')
-                      : {}),
-                  }}
-                >
-                  Male
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSex('female')}
-                  aria-pressed={sex === 'female'}
-                  style={{
-                    ...toggleBtnBase,
-                    ...(sex === 'female'
-                      ? activeToggle('var(--accent-rose)', 'var(--accent-rose-glow)')
-                      : {}),
-                  }}
-                >
-                  Female
-                </button>
+            {/* Sex + Age — one row; sex gets more width */}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
+              <div className="input-group" style={{ flex: 1.65, marginBottom: 0 }}>
+                <label className="input-label">Sex</label>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSex('male')}
+                    aria-pressed={sex === 'male'}
+                    style={{
+                      ...toggleBtnBase,
+                      ...(sex === 'male'
+                        ? activeToggle('var(--accent-blue)', 'var(--accent-blue-glow)')
+                        : {}),
+                    }}
+                  >
+                    Male
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSex('female')}
+                    aria-pressed={sex === 'female'}
+                    style={{
+                      ...toggleBtnBase,
+                      ...(sex === 'female'
+                        ? activeToggle('var(--accent-rose)', 'var(--accent-rose-glow)')
+                        : {}),
+                    }}
+                  >
+                    Female
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* Age + Height */}
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <div className="input-group" style={{ flex: 1 }}>
+              <div className="input-group" style={{ flex: 0.85, marginBottom: 0 }}>
                 <label className="input-label" htmlFor="onb-age">
                   Age
                 </label>
@@ -267,30 +346,14 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   onChange={(e) => setAge(e.target.value)}
                 />
               </div>
-              <div className="input-group" style={{ flex: 1 }}>
-                <label className="input-label" htmlFor="onb-height">
-                  Height (cm)
-                </label>
-                <input
-                  id="onb-height"
-                  className="input-field"
-                  type="number"
-                  inputMode="decimal"
-                  min={50}
-                  max={260}
-                  placeholder="cm"
-                  value={heightCm}
-                  onChange={(e) => setHeightCm(e.target.value)}
-                />
-              </div>
             </div>
 
-            {/* Weight with unit toggle */}
+            {/* Weight — full row with unit toggle */}
             <div className="input-group">
               <label className="input-label" htmlFor="onb-weight">
                 Weight
               </label>
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
                 <input
                   id="onb-weight"
                   className="input-field"
@@ -300,43 +363,62 @@ const Onboarding: React.FC<OnboardingProps> = ({
                   placeholder={weightUnit}
                   value={weightInput}
                   onChange={(e) => setWeightInput(e.target.value)}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minWidth: 0 }}
                 />
-                <div
-                  role="group"
-                  aria-label="Weight unit"
-                  style={{
-                    display: 'flex',
-                    borderRadius: '12px',
-                    border: '1px solid var(--border-glass)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {(['kg', 'lb'] as const).map((u) => (
-                    <button
-                      key={u}
-                      type="button"
-                      onClick={() => handleSwitchUnit(u)}
-                      aria-pressed={weightUnit === u}
-                      style={{
-                        padding: '0 1rem',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontFamily: 'var(--font-display)',
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                        transition: 'var(--transition-smooth)',
-                        background:
-                          weightUnit === u ? 'var(--accent-purple)' : 'rgba(255,255,255,0.03)',
-                        color:
-                          weightUnit === u ? 'var(--text-primary)' : 'var(--text-secondary)',
-                        boxShadow: weightUnit === u ? '0 0 12px var(--accent-purple-glow)' : 'none',
-                      }}
-                    >
-                      {u}
-                    </button>
-                  ))}
-                </div>
+                {unitToggle(['kg', 'lb'], weightUnit, (u) => handleSwitchUnit(u as 'kg' | 'lb'), 'Weight unit')}
+              </div>
+            </div>
+
+            {/* Height — full row with cm / ft toggle */}
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">Height</label>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
+                {heightUnit === 'cm' ? (
+                  <input
+                    id="onb-height-cm"
+                    className="input-field"
+                    type="number"
+                    inputMode="decimal"
+                    min={50}
+                    max={260}
+                    placeholder="cm"
+                    value={heightCmInput}
+                    onChange={(e) => setHeightCmInput(e.target.value)}
+                    style={{ flex: 1, minWidth: 0 }}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 0, alignItems: 'stretch' }}>
+                    <input
+                      id="onb-height-ft"
+                      className="input-field"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={8}
+                      placeholder="ft"
+                      value={heightFtInput}
+                      onChange={(e) => setHeightFtInput(e.target.value)}
+                      style={{ flex: 1, minWidth: 0 }}
+                      aria-label="Height feet"
+                    />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexShrink: 0, alignSelf: 'center' }}>ft</span>
+                    <input
+                      id="onb-height-in"
+                      className="input-field"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={11}
+                      placeholder="in"
+                      value={heightInInput}
+                      onChange={(e) => setHeightInInput(e.target.value)}
+                      style={{ flex: 1, minWidth: 0 }}
+                      aria-label="Height inches"
+                    />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexShrink: 0, alignSelf: 'center' }}>in</span>
+                  </div>
+                )}
+                {unitToggle(['cm', 'ft'], heightUnit, (u) => handleSwitchHeightUnit(u as 'cm' | 'ft'), 'Height unit')}
               </div>
             </div>
           </div>

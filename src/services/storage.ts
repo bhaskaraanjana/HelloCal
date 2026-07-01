@@ -1,21 +1,13 @@
 import type { MealLog, WorkoutLog, UserGoals, CoachPersonality, StorageData, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement, HydrationLog, MealPreset } from '../types/nutrition';
-import type { CustomMicro } from '../types/nutrition';
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements, sanitizeHydrationLogs, sanitizeMealPresets, sanitizeCustomMicros } from './sanitize';
 import { clampGoal } from './validation';
+import { buildDefaultMicros, mergeDefaultMicroCatalog } from './defaultMicros';
 
 // Bump when the on-disk shape changes in a way that needs a migration step.
 // v2: rebrand HaloCal -> HelloCal migrated localStorage keys halocal_* -> hellocal_*.
 // v3: seed AppSettings.customMicros (custom micronutrient HUD) from legacy visibleMicros.
-const SCHEMA_VERSION = 3;
-
-/** The starter custom-micronutrient set — all data-backed FoodItem fields so they show real intake. */
-function buildDefaultMicros(goals: UserGoals, vis?: { addedSugar?: boolean; fiber?: boolean; sodium?: boolean }): CustomMicro[] {
-  return [
-    { id: 'micro_addedsugar', name: 'Added Sugar', emoji: '🍭', unit: 'g', dailyLimit: goals.addedSugar ?? 30, isLimit: true, color: 'var(--accent-purple)', glowColor: 'var(--accent-purple-glow)', fieldKey: 'addedSugar', hidden: vis?.addedSugar === false || undefined },
-    { id: 'micro_fiber', name: 'Dietary Fiber', emoji: '🌿', unit: 'g', dailyLimit: goals.fiber ?? 30, isLimit: false, color: 'var(--accent-teal)', glowColor: 'var(--accent-teal-glow)', fieldKey: 'fiber', hidden: vis?.fiber === false || undefined },
-    { id: 'micro_sodium', name: 'Sodium', emoji: '🧂', unit: 'mg', dailyLimit: goals.sodium ?? 2300, isLimit: true, color: 'var(--accent-amber)', glowColor: 'var(--accent-amber-glow)', fieldKey: 'sodium', hidden: vis?.sodium === false || undefined },
-  ];
-}
+// v4: expand default micronutrient catalog (omegas, vitamins, minerals).
+const SCHEMA_VERSION = 4;
 
 const KEYS = {
   LOGS: 'hellocal_logs',
@@ -41,8 +33,8 @@ const DEFAULT_GOALS: UserGoals = {
   protein: 130,
   carbs: 220,
   fat: 65,
-  addedSugar: 30,
-  fiber: 30,
+  addedSugar: 50,
+  fiber: 28,
   sodium: 2300,
   waterTarget: 2500
 };
@@ -99,7 +91,16 @@ const DEFAULT_SETTINGS: AppSettings = {
   visibleMacros: {
     protein: true,
     carbs: true,
-    fat: true
+    fat: true,
+    saturatedFat: false,
+    transFat: false,
+  },
+  macroIsLimit: {
+    protein: false,
+    carbs: false,
+    fat: false,
+    saturatedFat: true,
+    transFat: true,
   },
   visibleMicros: {
     addedSugar: true,
@@ -110,11 +111,12 @@ const DEFAULT_SETTINGS: AppSettings = {
     calorieHalo: true,
     macros: true,
     micros: true,
-    workouts: true,
+    workouts: false,
     mealSlots: true,
     goalCompletion: true,
     water: true,
-    streak: true
+    streak: true,
+    supplements: true,
   },
   reminders: {
     enabled: false,
@@ -162,24 +164,31 @@ export const storage = {
         }
       }
 
-      if (stored < 3) {
-        // Seed customMicros from legacy visibleMicros + goals (once). Use safeParse
-        // so a corrupt settings/goals value is skipped rather than throwing — a throw
-        // here would be swallowed by the outer catch and the VERSION stamp below would
-        // never run, re-running this migration on every load forever.
+      const migrateSettingsMicros = (mergeCatalog: boolean) => {
         const sRaw = localStorage.getItem(KEYS.SETTINGS);
         const s = sRaw ? safeParse(sRaw) : null;
-        if (s && typeof s === 'object' && !Array.isArray(s)) {
-          const sObj = s as Record<string, unknown>;
-          if (!Array.isArray(sObj.customMicros) || sObj.customMicros.length === 0) {
-            const gRaw = localStorage.getItem(KEYS.GOALS);
-            const gParsed = gRaw ? safeParse(gRaw) : null;
-            const g = (gParsed && typeof gParsed === 'object' ? gParsed : DEFAULT_GOALS) as UserGoals;
-            // Sanitize so a NaN/missing goal limit can't be persisted to disk.
-            sObj.customMicros = sanitizeCustomMicros(buildDefaultMicros(g, sObj.visibleMicros as { addedSugar?: boolean; fiber?: boolean; sodium?: boolean } | undefined));
-            localStorage.setItem(KEYS.SETTINGS, JSON.stringify(sObj));
-          }
+        if (!s || typeof s !== 'object' || Array.isArray(s)) return;
+        const sObj = s as Record<string, unknown>;
+        const gRaw = localStorage.getItem(KEYS.GOALS);
+        const gParsed = gRaw ? safeParse(gRaw) : null;
+        const g = (gParsed && typeof gParsed === 'object' ? gParsed : DEFAULT_GOALS) as UserGoals;
+        const vis = sObj.visibleMicros as { addedSugar?: boolean; fiber?: boolean; sodium?: boolean } | undefined;
+        let micros = sanitizeCustomMicros(sObj.customMicros);
+        if (micros.length === 0) {
+          micros = sanitizeCustomMicros(buildDefaultMicros(g, vis));
+        } else if (mergeCatalog) {
+          micros = sanitizeCustomMicros(mergeDefaultMicroCatalog(micros));
         }
+        sObj.customMicros = micros;
+        localStorage.setItem(KEYS.SETTINGS, JSON.stringify(sObj));
+      };
+
+      if (stored < 3) {
+        migrateSettingsMicros(false);
+      }
+
+      if (stored < 4) {
+        migrateSettingsMicros(true);
       }
 
       localStorage.setItem(KEYS.VERSION, String(SCHEMA_VERSION));
@@ -225,6 +234,7 @@ export const storage = {
         ...DEFAULT_SETTINGS,
         ...parsedSettings,
         visibleMacros: { ...DEFAULT_SETTINGS.visibleMacros, ...(parsedSettings.visibleMacros || {}) },
+        macroIsLimit: { ...DEFAULT_SETTINGS.macroIsLimit, ...(parsedSettings.macroIsLimit || {}) },
         visibleMicros: { ...DEFAULT_SETTINGS.visibleMicros, ...(parsedSettings.visibleMicros || {}) },
         visibleWidgets: { ...DEFAULT_SETTINGS.visibleWidgets, ...(parsedSettings.visibleWidgets || {}) },
         reminders: { ...DEFAULT_SETTINGS.reminders, ...(parsedSettings.reminders || {}) },

@@ -35,7 +35,15 @@ describe('sanitizeCustomMicros', () => {
     expect(canonicalMicroUnit('iron')).toBe('mg');
     expect(canonicalMicroUnit('potassium')).toBe('mg');
     expect(canonicalMicroUnit('addedSugar')).toBe('g');
+    expect(canonicalMicroUnit('omega3')).toBe('g');
     expect(canonicalMicroUnit('selenium')).toBeNull();
+  });
+
+  it('DATA_BACKED_MICRO_FIELDS rejects unknown custom nutrients', async () => {
+    const { DATA_BACKED_MICRO_FIELDS } = await import('./sanitize');
+    expect(DATA_BACKED_MICRO_FIELDS.has('fiber')).toBe(true);
+    expect(DATA_BACKED_MICRO_FIELDS.has('omega3')).toBe(true);
+    expect(DATA_BACKED_MICRO_FIELDS.has('lycopene')).toBe(false);
   });
 });
 
@@ -111,11 +119,21 @@ describe('sanitizeFavorites', () => {
     expect(out[0].calories).toBe(105);
   });
 
-  it('keeps optional micros only when present and coerces them', () => {
-    const out = sanitizeFavorites([{ name: 'Yogurt', calories: 100, sodium: 'x', addedSugar: 6 }]);
-    expect(out[0].sodium).toBe(0); // present-but-garbage -> 0
+  it('keeps optional micros and nested micros map when present', () => {
+    const out = sanitizeFavorites([{
+      name: 'Yogurt',
+      calories: 100,
+      protein: 10,
+      carbs: 8,
+      fat: 2,
+      addedSugar: 6,
+      iron: 0.4,
+      micros: { omega3: 0.2 },
+    }]);
     expect(out[0].addedSugar).toBe(6);
-    expect(out[0].fiber).toBeUndefined(); // absent -> stays undefined
+    expect(out[0].iron).toBe(0.4);
+    expect(out[0].micros?.omega3).toBe(0.2);
+    expect(out[0].fiber).toBeUndefined();
   });
 
   it('normalizes pinned to boolean|undefined', () => {

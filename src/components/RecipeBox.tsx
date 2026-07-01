@@ -8,13 +8,14 @@ import {
 import confetti from 'canvas-confetti';
 
 import { CustomModal } from './ui/CustomModal';
+import { isAiReady, type AiAccess } from '../services/aiRuntime';
 
 interface RecipeBoxProps {
   recipes: Recipe[];
   onSaveRecipes: (recipes: Recipe[]) => void;
   onLogRecipePortion: (recipe: Recipe, multiplier: number, portionName: string) => void;
   onTriggerToast: (msg: string) => void;
-  apiKey: string;
+  aiAccess: AiAccess;
 }
 
 interface MicroFieldConfig {
@@ -47,7 +48,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
   onSaveRecipes,
   onLogRecipePortion,
   onTriggerToast,
-  apiKey
+  aiAccess
 }) => {
   const [recipeToDelete, setRecipeToDelete] = useState<{ id: string, name: string } | null>(null);
   // Navigation & expansion states
@@ -90,7 +91,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      onTriggerToast('🎙️ Speech Recognition is not supported in this browser.');
+      onTriggerToast('Speech recognition is not supported in this browser.');
       return;
     }
 
@@ -101,12 +102,12 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
 
     recognition.onstart = () => {
       setIsDictating(true);
-      onTriggerToast('🎙️ Listening... Dictate your recipe details now!');
+      onTriggerToast('Listening…');
     };
 
     recognition.onerror = (event: any) => {
       console.error(event);
-      onTriggerToast('🎙️ Speech recognition error occurred.');
+      onTriggerToast('Speech recognition failed.');
       setIsDictating(false);
     };
 
@@ -217,7 +218,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
 
   // Auto search and estimate macro/micros for an ingredient row
   const autoEstimateIngredientRow = async (index: number) => {
-    if (!apiKey) return; // Prevent calls without API key
+    if (!isAiReady(aiAccess)) return;
     const ing = formIngredients[index];
     if (!ing) return;
     const name = ing.name.trim();
@@ -233,7 +234,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
     setRowEstimatingIndex(index);
     try {
       const description = `Recipe ingredient to estimate macros for: ${query}`;
-      const parsed = await gemini.parseRecipeDescription(description, apiKey);
+      const parsed = await gemini.parseRecipeDescription(description, aiAccess);
       if (parsed.ingredients && parsed.ingredients.length > 0) {
         const est = parsed.ingredients[0];
         setFormIngredients(prev => {
@@ -332,7 +333,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
       setAiError('Please enter a description or recipe text for the AI to parse.');
       return;
     }
-    if (!apiKey) {
+    if (!isAiReady(aiAccess)) {
       setAiError('Gemini API Key is required. Please add it in Settings.');
       return;
     }
@@ -341,7 +342,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
     setAiError(null);
 
     try {
-      const parsed = await gemini.parseRecipeDescription(desc, apiKey);
+      const parsed = await gemini.parseRecipeDescription(desc, aiAccess);
       setFormName(parsed.name || '');
       setFormServings(parsed.servings || 1);
       setFormYieldUnit(parsed.yieldUnit || 'serving');
@@ -506,12 +507,10 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
             boxShadow: 'none',
             height: 'fit-content',
             fontSize: '0.85rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em'
           }}
         >
           {isAddingNew ? (
-            <span>Cancel Creator</span>
+            <span>Cancel</span>
           ) : (
             <>
               <Plus size={15} strokeWidth={2.5} />
@@ -534,7 +533,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
 
           <form onSubmit={handleSaveRecipe} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', boxSizing: 'border-box' }}>
             
-            {/* 2a. Voice Dictation Panel */}
+            {/* Voice dictation */}
             <div style={{
               background: 'transparent',
               border: 'none',
@@ -542,119 +541,60 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               padding: '0.25rem 0',
               display: 'flex',
               flexDirection: 'column',
-              gap: '1rem',
+              gap: '0.75rem',
               width: '100%',
               boxSizing: 'border-box'
             }}>
-              <div>
-                <h4 style={{
-                  fontSize: '0.9rem',
-                  fontWeight: 750,
-                  color: 'var(--accent-purple)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontFamily: 'var(--font-display)',
-                  margin: 0
-                }}>
-                  <Mic size={16} color="var(--accent-purple)" />
-                  <span>🎙️ VOICE DICTATION WIZARD</span>
-                </h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '0.2rem', marginBottom: 0 }}>
-                  Tap the microphone and speak your recipe ingredients, amounts, and yield. The AI will continuously transcribe in the box below!
-                </p>
-              </div>
+              <h4 style={{
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontFamily: 'var(--font-display)',
+                margin: 0
+              }}>
+                <Mic size={15} color="var(--accent-purple)" />
+                Dictate
+              </h4>
 
-              {/* Dynamic morphing console */}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '1rem',
-                padding: '1.25rem',
+                gap: '0.75rem',
+                padding: '1rem',
                 borderRadius: '16px',
                 border: '1px solid var(--border-glass)',
                 background: recipeStatus === 'idle' ? 'rgba(255,255,255,0.005)' : 'transparent',
-                position: 'relative',
-                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                 width: '100%',
                 boxSizing: 'border-box'
               }}>
-                {/* Guidelines Text (Stable Height Layered Container) */}
-                <div style={{ position: 'relative', height: '56px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-                  {/* Idle state guidelines */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: recipeStatus === 'idle' ? 1 : 0,
-                    transition: 'opacity 0.3s ease-in-out',
-                    pointerEvents: recipeStatus === 'idle' ? 'auto' : 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600 }}>
-                      TAP TO START DICTATING
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.15rem' }}>
-                      Speak ingredients and yield clearly and watch AI construct the recipe.
-                    </span>
-                  </div>
-                  
-                  {/* Recording state guidelines */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: recipeStatus === 'recording' ? 1 : 0,
-                    transition: 'opacity 0.3s ease-in-out',
-                    pointerEvents: recipeStatus === 'recording' ? 'auto' : 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <span style={{ color: 'var(--accent-rose)', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      🔴 DICTATING RECIPE...
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.15rem' }}>
-                      Listening... Speak your recipe details continuously.
-                    </span>
-                  </div>
+                <p
+                  aria-live="polite"
+                  style={{
+                    color: recipeStatus === 'recording' ? 'var(--accent-rose)' : recipeStatus === 'processing' ? 'var(--accent-purple)' : 'var(--text-muted)',
+                    fontSize: '0.78rem',
+                    fontWeight: 500,
+                    margin: 0,
+                    textAlign: 'center',
+                    minHeight: '1.1rem'
+                  }}
+                >
+                  {recipeStatus === 'recording' ? 'Listening…' : recipeStatus === 'processing' ? 'Estimating…' : 'Tap mic to dictate ingredients and yield'}
+                </p>
 
-                  {/* Processing state guidelines */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: recipeStatus === 'processing' ? 1 : 0,
-                    transition: 'opacity 0.3s ease-in-out',
-                    pointerEvents: recipeStatus === 'processing' ? 'auto' : 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <span style={{ color: 'var(--accent-purple)', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      ⚡ AI SCANNER ESTIMATING MACROS...
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.15rem' }}>
-                      Gemini is compiling ingredient metrics and generating batch formulas...
-                    </span>
-                  </div>
-                </div>
-
-                {/* Dynamic Waveform Visualizer when recording (Smooth Slide Transition) */}
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '5px',
-                  height: recipeStatus === 'recording' ? '40px' : '0px',
+                  height: recipeStatus === 'recording' ? '32px' : '0px',
                   opacity: recipeStatus === 'recording' ? 1 : 0,
                   overflow: 'hidden',
                   transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                  zIndex: 1,
                   width: '100%'
                 }}>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((bar) => {
@@ -675,15 +615,14 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                   })}
                 </div>
 
-                {/* Dictation mic button */}
                 <button 
                   type="button"
                   onClick={handleToggleDictation}
                   disabled={recipeStatus === 'processing'}
-                  title={recipeStatus === 'recording' ? "Stop Dictation" : "Voice Dictate Recipe"}
+                  aria-label={recipeStatus === 'recording' ? 'Stop dictation' : 'Start dictation'}
                   style={{
-                    width: '80px',
-                    height: '80px',
+                    width: '72px',
+                    height: '72px',
                     borderRadius: '50%',
                     backgroundColor: recipeStatus === 'recording' ? 'var(--accent-rose)' : 'var(--accent-purple)',
                     border: 'none',
@@ -693,21 +632,19 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                     justifyContent: 'center',
                     color: 'var(--text-primary)',
                     boxShadow: recipeStatus === 'recording' ? '0 0 30px var(--accent-rose-glow)' : '0 0 20px var(--accent-purple-glow)',
-                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                    position: 'relative',
-                    zIndex: 1
+                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
                   }}
                 >
                   {recipeStatus === 'recording' ? (
-                    <MicOff size={32} />
+                    <MicOff size={28} />
                   ) : (
-                    <Mic size={32} />
+                    <Mic size={28} />
                   )}
                 </button>
               </div>
             </div>
 
-            {/* 2b. AI Text Import Panel */}
+            {/* Paste & parse */}
             <div style={{
               background: 'transparent',
               border: 'none',
@@ -715,33 +652,28 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               padding: '0.25rem 0',
               display: 'flex',
               flexDirection: 'column',
-              gap: '1rem',
+              gap: '0.75rem',
               width: '100%',
               boxSizing: 'border-box'
             }}>
-              <div>
-                <h4 style={{
-                  fontSize: '0.9rem',
-                  fontWeight: 750,
-                  color: 'var(--accent-teal)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontFamily: 'var(--font-display)',
-                  margin: 0
-                }}>
-                  <Sparkles size={16} color="var(--accent-teal)" />
-                  <span>✍️ AI TEXT IMPORT & ESTIMATOR</span>
-                </h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '0.2rem', marginBottom: 0 }}>
-                  Paste standard ingredient lists, copy blogs, or write out ingredients. The AI will estimate macros, parse batch sizing, and construct the ingredient list instantly!
-                </p>
-              </div>
+              <h4 style={{
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontFamily: 'var(--font-display)',
+                margin: 0
+              }}>
+                <Sparkles size={15} color="var(--accent-teal)" />
+                Paste recipe
+              </h4>
 
               <textarea
                 value={recipeDescriptionInput}
                 onChange={(e) => setRecipeDescriptionInput(e.target.value)}
-                placeholder="e.g. 'I made a batch of keto snack mix. I mixed 2 cups almonds, 1 cup raw cashews, 3 tablespoons pumpkin seeds, and 50g unsweetened chocolate. It yields 8 servings.'"
+                placeholder="Ingredients, amounts, and servings — e.g. 2 cups oats, 1 cup milk, yields 4 servings"
                 rows={3}
                 style={{
                   width: '100%',
@@ -806,12 +738,12 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                   {isAiParsing ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      <span>Estimating Recipe...</span>
+                      <span>Parsing…</span>
                     </>
                   ) : (
                     <>
                       <Sparkles size={14} />
-                      <span>AI Parse Full Recipe</span>
+                      <span>Parse recipe</span>
                     </>
                   )}
                 </button>
@@ -828,8 +760,8 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               flexDirection: 'column',
               gap: '1.25rem'
             }}>
-              <h4 style={{ fontSize: '0.9rem', fontWeight: 750, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '0.5rem', margin: 0 }}>
-                📋 General Details
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: 0, fontFamily: 'var(--font-display)' }}>
+                Details
               </h4>
               
               <div style={{
@@ -840,12 +772,12 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               }}>
                 {/* Recipe Name */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Recipe Name</label>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Name</label>
                   <input
                     type="text"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    placeholder="e.g. My Breakfast Granola"
+                    placeholder="Breakfast granola"
                     required
                     style={{
                       background: 'var(--bg-glass)',
@@ -867,7 +799,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                 {/* Total yield size */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Batch Servings</label>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Servings</label>
                     <input
                       type="number"
                       min={1}
@@ -892,12 +824,12 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Yield Unit</label>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Unit</label>
                     <input
                       type="text"
                       value={formYieldUnit}
                       onChange={(e) => setFormYieldUnit(e.target.value)}
-                      placeholder="e.g. cup, slice"
+                      placeholder="serving"
                       style={{
                         background: 'var(--bg-glass)',
                         border: '1px solid var(--border-glass)',
@@ -918,7 +850,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
 
                 {/* Emoji Selector */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Recipe Icon</label>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Icon</label>
                   <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                     <div style={{
                       width: '42px',
@@ -979,8 +911,8 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               gap: '1.25rem'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 750, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-                  🥗 Ingredients List ({formIngredients.length})
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: 0, fontFamily: 'var(--font-display)' }}>
+                  Ingredients ({formIngredients.length})
                 </h4>
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -999,7 +931,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                     }}
                   >
                     <Plus size={12} />
-                    <span>Add Ingredient</span>
+                    <span>Add row</span>
                   </button>
                 </div>
               </div>
@@ -1015,7 +947,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                       color: 'var(--text-muted)',
                       fontSize: '0.82rem'
                     }}>
-                      No ingredients added yet. Add rows manually above, or use the AI bulk box below!
+                      No ingredients yet. Dictate, paste, or add a row.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1038,12 +970,12 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                           {/* Row 1: Name, Quantity, Delete */}
                           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 2 }}>
-                              <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <span>Ingredient Name</span>
+                              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <span>Ingredient</span>
                                 {rowEstimatingIndex === idx && (
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: 'var(--accent-purple)', textTransform: 'none', fontWeight: 600, animation: 'pulse 1.5s infinite' }}>
                                     <Loader2 size={10} className="animate-spin" />
-                                    <span>AI Estimating...</span>
+                                    <span>Estimating…</span>
                                   </span>
                                 )}
                               </label>
@@ -1078,7 +1010,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1, minWidth: '85px' }}>
-                              <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Amount</label>
+                              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Amount</label>
                               <input
                                 type="text"
                                 value={ing.quantity}
@@ -1365,13 +1297,13 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               width: '100%',
               boxSizing: 'border-box'
             }}>
-              <h4 style={{ fontSize: '0.9rem', fontWeight: 750, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '0.5rem', margin: 0 }}>
-                📊 Recipe Calculations
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: 0, fontFamily: 'var(--font-display)' }}>
+                Totals
               </h4>
               
               {formIngredients.length === 0 ? (
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '0.5rem' }}>
-                  Macro calculations will update here in real-time as soon as ingredients are added!
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem' }}>
+                  Add ingredients to see macros.
                 </div>
               ) : (() => {
                 const totalCals = formIngredients.reduce((s, i) => s + (i.calories || 0), 0);
@@ -1406,7 +1338,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                       background: 'rgba(255,255,255,0.01)',
                       border: '1px solid var(--border-glass)'
                     }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 750, textTransform: 'uppercase' }}>Full Batch Totals</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>Batch</span>
                       <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 650 }}>{totalCals} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>kcal</span></span>
                         <span style={{ fontSize: '0.9rem', color: 'var(--accent-purple)', fontWeight: 600 }}>P: {Math.round(totalProt)}g</span>
@@ -1460,7 +1392,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                       background: 'rgba(139, 92, 246, 0.02)',
                       border: '1px solid var(--accent-purple-glow)'
                     }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--accent-purple)', fontWeight: 750, textTransform: 'uppercase' }}>Per Serving ({formServings} {formYieldUnit}(s))</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--accent-purple)', fontWeight: 600 }}>Per serving</span>
                       <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 750 }}>{servCals} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>kcal</span></span>
                         <span style={{ fontSize: '0.95rem', color: 'var(--accent-purple)', fontWeight: 700 }}>P: {servProt}g</span>
@@ -1548,7 +1480,7 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
                   }}
                 >
                   <Check size={18} />
-                  <span>Save to Database</span>
+                  <span>Save recipe</span>
                 </button>
               </div>
 
@@ -1570,16 +1502,16 @@ export const RecipeBox: React.FC<RecipeBoxProps> = ({
               color: 'var(--text-secondary)'
             }}>
               <BookOpen size={48} style={{ opacity: 0.2, marginBottom: '1rem', color: 'var(--accent-purple)' }} />
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', color: 'var(--text-primary)' }}>No Saved Recipes</h3>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', color: 'var(--text-primary)' }}>No recipes yet</h3>
               <p style={{ fontSize: '0.85rem', maxWidth: '350px', margin: '0.5rem auto 1.5rem auto' }}>
-                Create your first batch recipe or restore defaults by clearing data! You can easily log customized cups, grams, or servings afterwards.
+                Add a batch recipe, then log portions from the list.
               </p>
               <button 
                 onClick={() => setIsAddingNew(true)} 
                 className="btn btn-primary"
                 style={{ padding: '0.6rem 1.5rem', borderRadius: '10px', fontSize: '0.85rem', cursor: 'pointer' }}
               >
-                Create Recipe Now
+                New recipe
               </button>
             </div>
           ) : (

@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import type { MealLog, FoodItem, WorkoutLog, UserGoals, CoachPersonality, CoachResponse, AppSettings, WaterLog, BodyMetric, FavoriteFood, UserProfile, MealTemplate, Recipe, Supplement } from './types/nutrition';
 import { storage } from './services/storage';
-import { computeStreak, totalLoggedDays, isSameLocalDay, dayRange } from './services/insights';
-import { clampGoal, GOAL_BOUNDS } from './services/validation';
+import { computeStreak, isSameLocalDay, dayRange } from './services/insights';
+import { clampGoal, GOAL_BOUNDS, coerceFoodItem } from './services/validation';
 import { sanitizeMealLogs, sanitizeWorkouts, sanitizeFavorites, sanitizeMealTemplates, sanitizeWaterLogs, sanitizeBodyMetrics, sanitizeRecipes, sanitizeSupplements } from './services/sanitize';
-import { SupplementTracker } from './components/SupplementTracker';
 import { scaleNutrients, autoMealSlot } from './services/logMath';
-import { isSupabaseConfigured, getCurrentUser, onAuthChange, signIn as cloudSignIn, signUp as cloudSignUp, signOut as cloudSignOut, pushData as cloudPush, pullData as cloudPull, type CloudUser } from './services/cloudSync';
+import { copyAuxiliaryNutrients } from './services/nutrientValue';
+import { isSupabaseConfigured, getAccountDetails, onAuthChange, signIn as cloudSignIn, signUp as cloudSignUp, signOut as cloudSignOut, signInWithGoogle, pushData as cloudPush, pullData as cloudPull, syncOnLogin, requestPasswordReset, detectSyncConflict, type CloudAccount } from './services/cloudSync';
+import { isHostedAiAvailable, type AiAccess, type AiProvider } from './services/aiRuntime';
+import type { CloudSyncStatus } from './components/AccountSection';
+import { SyncConflictModal } from './components/SyncConflictModal';
 import { initNative, haptic, hapticSuccess, isNative, scheduleMealReminders, scheduleSupplementReminders, requestNotificationPermission, showLocalNotification, parseHM } from './services/native';
 import { Dashboard } from './components/Dashboard';
 import { VoiceInput } from './components/VoiceInput';
@@ -19,26 +22,16 @@ import { Settings } from './components/Settings';
 import { RefinementModal } from './components/RefinementModal';
 import { Utensils, LayoutDashboard, BarChart2, Settings as SettingsIcon, Heart, CheckCircle, BookOpen, Flame } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { AiCustomizerDrawer } from './components/AiCustomizerDrawer';
-import { HydrationTracker } from './components/HydrationTracker';
-import { QuickLogBar } from './components/QuickLogBar';
-// WeightTracker also pulls in Chart.js; lazy-load it alongside Analytics so the
-// charting library stays out of the initial bundle entirely.
-const WeightTracker = React.lazy(() =>
-  import('./components/WeightTracker').then((m) => ({ default: m.WeightTracker }))
-);
 import { Onboarding } from './components/Onboarding';
 import { InstallPrompt } from './components/InstallPrompt';
-import { FoodSearchDrawer } from './components/FoodSearchDrawer';
 import { MealTemplateBar } from './components/MealTemplateBar';
 // RecipeBox is large + AI-driven; lazy-load it so it stays out of the initial bundle.
 const RecipeBox = React.lazy(() =>
   import('./components/RecipeBox').then((m) => ({ default: m.RecipeBox }))
 );
 
-// Common foods seeded into Quick Add on first run so the fastest repeat-log path
-// isn't empty for brand-new users. Low frequency/lastLogged means real, frequently
-// logged foods naturally outrank and replace them over time.
+// Common foods seeded on first run for the favorites/recents model. Real logs
+// naturally outrank and replace them over time.
 const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = [
   { name: 'Banana', quantity: '1 medium', calories: 105, protein: 1.3, carbs: 27, fat: 0.4 },
   { name: 'Apple', quantity: '1 medium', calories: 95, protein: 0.5, carbs: 25, fat: 0.3 },
@@ -49,9 +42,9 @@ const SEED_FAVORITES: Omit<FavoriteFood, 'id' | 'frequency' | 'lastLogged'>[] = 
 ];
 
 const NAV_TABS = [
-  { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { key: 'timeline', label: 'Timeline', Icon: Utensils },
   { key: 'recipes', label: 'Recipes', Icon: BookOpen },
+  { key: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { key: 'analytics', label: 'Analytics', Icon: BarChart2 },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon },
 ] as const;
@@ -79,18 +72,23 @@ export const App: React.FC = () => {
     theme: 'obsidian',
     visibleMacros: { protein: true, carbs: true, fat: true },
     visibleMicros: { addedSugar: true, fiber: true, sodium: true },
-    visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: true, mealSlots: true, goalCompletion: true, water: true, streak: true }
+    visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: false, mealSlots: true, goalCompletion: true, water: true, streak: true, supplements: true }
   });
-  const [customizerOpen, setCustomizerOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
-  const [customizerScope, setCustomizerScope] = useState<'general' | 'macronutrients' | 'micronutrients' | 'widgets'>('general');
+  const [cloudAccount, setCloudAccount] = useState<CloudAccount | null>(null);
+  const cloudAccountRef = useRef<CloudAccount | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>({ lastAt: null, syncing: false, error: null });
+  const [syncConflictOpen, setSyncConflictOpen] = useState(false);
+  const [syncConflictRemoteAt, setSyncConflictRemoteAt] = useState<string | null>(null);
+  const [syncConflictBusy, setSyncConflictBusy] = useState(false);
+  const importJsonRef = useRef<(json: string) => boolean>(() => false);
+  const backupJsonRef = useRef('');
 
   // Loading indicator on first mount
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Tab View
   const [activeTab, setActiveTab] = useState<'dashboard' | 'timeline' | 'recipes' | 'analytics' | 'settings'>('dashboard');
+  const [timelineFocusDate, setTimelineFocusDate] = useState<number | null>(null);
 
   // Refinement modal states
   const [refinementOpen, setRefinementOpen] = useState(false);
@@ -100,6 +98,7 @@ export const App: React.FC = () => {
   const [stagedCoaching, setStagedCoaching] = useState('');
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [stagedMealType, setStagedMealType] = useState<MealLog['mealType'] | undefined>(undefined);
+  const [stagedLogTimestamp, setStagedLogTimestamp] = useState<number | undefined>(undefined);
 
   // Floating notifications/toast state. Supports an optional inline action
   // (e.g. "Edit" after an instant-log) so the toast can offer a quick follow-up.
@@ -145,7 +144,7 @@ export const App: React.FC = () => {
     setBodyMetrics(data.bodyMetrics || []);
     const favs = data.favorites || [];
     if (favs.length === 0 && (data.logs?.length || 0) === 0) {
-      // Fresh install: seed Quick Add so one-tap logging works immediately.
+      // Fresh install: seed starter favorites for the recents model.
       const seeded: FavoriteFood[] = SEED_FAVORITES.map((f, i) => ({
         ...f,
         id: `seed_${i}`,
@@ -190,14 +189,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.body.className = `theme-${appSettings.theme}`;
   }, [appSettings.theme]);
-
-  // Track Supabase auth state (no-op when cloud sync isn't configured).
-  useEffect(() => {
-    if (!isSupabaseConfigured()) return;
-    getCurrentUser().then(setCloudUser).catch(() => setCloudUser(null));
-    const unsub = onAuthChange(setCloudUser);
-    return unsub;
-  }, []);
 
   // Meal reminders: native schedules repeating local notifications; web fires
   // best-effort foreground nudges (only while the app is open, once per slot/day,
@@ -296,7 +287,13 @@ export const App: React.FC = () => {
   const handleSaveKey = (newKey: string) => {
     setGeminiKey(newKey);
     storage.saveGeminiKey(newKey);
-    triggerToast(newKey.trim() ? 'Gemini AI Supermode key has been activated!' : 'Gemini Key removed. App is now in smart offline mode.');
+    triggerToast(newKey.trim() ? 'Gemini key saved.' : 'Gemini key removed.');
+  };
+
+  const handleSaveAiProvider = (provider: AiProvider) => {
+    const next = { ...appSettings, aiProvider: provider };
+    handleSaveAppSettings(next);
+    triggerToast(provider === 'hosted' ? 'HelloCal AI selected — sign in to use it.' : 'Your Gemini key mode selected.');
   };
 
   const handleSavePersonality = (newPersonality: CoachPersonality) => {
@@ -308,26 +305,40 @@ export const App: React.FC = () => {
   // Open the refinement modal pre-filled with a parse result for review.
   const openRefinement = (response: CoachResponse) => {
     setStagedItems(response.items || []);
-    setStagedWorkout(response.workout || null);
-    setStagedLogType(response.type || 'food');
+    setStagedWorkout(null);
+    setStagedLogType('food');
     setStagedCoaching(response.coachingMessage || '');
     setStagedMealType(undefined);
     setRefinementOpen(true);
   };
 
-  // Core Log Action. The single most common case — one confident food item, no
-  // workout — is logged instantly, skipping the review modal entirely. A "Edit"
-  // affordance on the toast re-opens the modal on the just-created log if needed.
-  const handleLoggingSuccess = (response: CoachResponse) => {
-    const items = response.items || [];
+  const toFoodOnlyResponse = (response: CoachResponse): CoachResponse => ({
+    ...response,
+    type: 'food',
+    workout: undefined,
+    items: response.items || [],
+  });
+
+  // Core Log Action. The single most common case — one confident food item — is
+  // logged instantly, skipping the review modal entirely. A "Edit" affordance on
+  // the toast re-opens the modal on the just-created log if needed.
+  const handleLoggingSuccess = (response: CoachResponse, logTimestamp?: number) => {
+    const foodOnly = toFoodOnlyResponse(response);
+    const pendingTs = logTimestamp != null && Number.isFinite(logTimestamp) ? logTimestamp : undefined;
+    setStagedLogTimestamp(pendingTs);
+    const items = foodOnly.items || [];
+
+    if (items.length === 0) {
+      triggerToast('HelloCal logs food calories only. Describe what you ate.');
+      return;
+    }
+
     const isInstant =
-      response.type === 'food' &&
-      !response.workout &&
       items.length === 1 &&
       items[0].confidence === 'high';
 
     if (isInstant) {
-      const newId = handleConfirmSave(items, null);
+      const newId = handleConfirmSave(items, null, undefined, pendingTs);
       triggerToast(`Logged ${items[0].name} (+${Math.round(items[0].calories)} kcal)`, {
         label: 'Edit',
         run: () => {
@@ -336,30 +347,30 @@ export const App: React.FC = () => {
           setStagedLogType('food');
           setStagedCoaching('Adjust this item, then save your changes.');
           setEditingLogId(newId ?? null);
-          setStagedMealType(autoMealSlot());
+          setStagedMealType(autoMealSlot(new Date(pendingTs ?? Date.now())));
           setRefinementOpen(true);
         },
       });
       return;
     }
 
-    openRefinement(response);
-  };
-
-  // A food picked from the search drawer: stage it for portion review, then log.
-  const handleSearchPick = (item: Omit<FoodItem, 'id'>) => {
-    setSearchOpen(false);
-    openRefinement({
-      type: 'food',
-      items: [item],
-      coachingMessage: `Loaded "${item.name}" from the food database. Adjust the portion if needed, then log.`,
-    });
+    openRefinement(foodOnly);
   };
 
   const handleConfirmSave = (itemsToLog: Omit<FoodItem, 'id'>[], workoutToLog: Omit<WorkoutLog, 'id'> | null, mealTypeOverride?: MealLog['mealType'], timestampOverride?: number): string | undefined => {
+    const normalizedItems = itemsToLog
+      .map((it) => coerceFoodItem(it))
+      .filter((it): it is Omit<FoodItem, 'id'> => it != null);
+    if (normalizedItems.length === 0 && itemsToLog.length > 0 && !workoutToLog) {
+      triggerToast('Could not save — every item needs a name.');
+      return;
+    }
+    itemsToLog = normalizedItems;
     const hadNoLogsBefore = logs.length === 0;
     // Backfill support: a past timestamp logs to that day/time (else now).
-    const ts = timestampOverride && Number.isFinite(timestampOverride) ? timestampOverride : Date.now();
+    const ts = timestampOverride && Number.isFinite(timestampOverride)
+      ? timestampOverride
+      : (stagedLogTimestamp ?? Date.now());
     // Edit-in-place: replace the items of an existing meal log instead of inserting a new one.
     if (editingLogId) {
       const reindexed: FoodItem[] = itemsToLog.map((item, i) => ({
@@ -397,15 +408,14 @@ export const App: React.FC = () => {
         triggerToast('Meal updated successfully.');
       }
       setEditingLogId(null);
+      setStagedLogTimestamp(undefined);
       return;
     }
 
     let savedFood = false;
-    let savedWorkout = false;
     let createdMealId: string | undefined;
     let mealCals = 0;
     let foodCount = 0;
-    let workoutBurn = 0;
 
     // 1. Handle Food Items
     if (itemsToLog.length > 0) {
@@ -437,25 +447,12 @@ export const App: React.FC = () => {
       savedFood = true;
     }
 
-    // 2. Handle Workout
-    if (workoutToLog) {
-      const newWorkoutEntry: WorkoutLog = {
-        ...workoutToLog,
-        id: `workout_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: ts
-      };
+    // Workout logging is disabled — calories-only app.
+    void workoutToLog;
 
-      const updatedWorkouts = [newWorkoutEntry, ...workouts];
-      setWorkouts(updatedWorkouts);
-      storage.saveWorkouts(updatedWorkouts);
-
-      workoutBurn = workoutToLog.caloriesBurned;
-      savedWorkout = true;
-    }
-
-    // Celebration + a single consolidated toast (emitting separate food/workout and
+    // Celebration + a single consolidated toast (emitting separate food and
     // celebration toasts let the later one clobber the former, losing the +kcal info).
-    if (savedFood || savedWorkout) {
+    if (savedFood) {
       // Sum today's calories to see if close to target budget. Use the half-open
       // [start,end) day window (matches dailyTotals/insights) so future-dated or
       // clock-skewed entries can't leak into "today". The just-saved entry only
@@ -487,11 +484,9 @@ export const App: React.FC = () => {
         haptic('light');
       }
 
-      const parts: string[] = [];
-      if (savedFood) parts.push(`Logged ${foodCount} item(s) (+${mealCals} kcal)`);
-      if (savedWorkout) parts.push(`Workout logged (-${workoutBurn} kcal)`);
+      const parts: string[] = [`Logged ${foodCount} item(s) (+${mealCals} kcal)`];
       const base = parts.join(' · ');
-      triggerToast(onTarget ? `${base} · 🎯 You hit your target halo!` : base);
+      triggerToast(onTarget ? `${base} · 🎯 You hit your calorie goal!` : base);
     }
 
     // First successful log after a skipped onboarding: now that the user has
@@ -503,6 +498,7 @@ export const App: React.FC = () => {
       setTimeout(() => setOnboardingOpen(true), 1200);
     }
 
+    setStagedLogTimestamp(undefined);
     return createdMealId;
   };
 
@@ -629,7 +625,10 @@ export const App: React.FC = () => {
         const validatedWorkouts = sanitizeWorkouts(parsed.workouts);
         storage.saveWorkouts(validatedWorkouts);
         setWorkouts(validatedWorkouts);
-        if (parsed.geminiKey) storage.saveGeminiKey(parsed.geminiKey);
+        if (parsed.geminiKey) {
+          storage.saveGeminiKey(parsed.geminiKey);
+          setGeminiKey(parsed.geminiKey);
+        }
         if (parsed.coachPersonality) storage.saveCoach(parsed.coachPersonality);
         if (parsed.appSettings) {
           storage.saveAppSettings(parsed.appSettings);
@@ -678,58 +677,153 @@ export const App: React.FC = () => {
     }
   };
 
-  // --- Cloud sync (Supabase, optional) ---
-  const handleCloudSignIn = async (email: string, password: string) => {
+  const refreshCloudAccount = async () => {
+    const account = await getAccountDetails();
+    cloudAccountRef.current = account;
+    setCloudAccount(account);
+    return account;
+  };
+
+  const applyCloudPull = async () => {
+    const result = await cloudPull();
+    if (!result) return false;
+    return importJsonRef.current(result.json);
+  };
+
+  const runPostLoginSync = async () => {
+    setCloudSyncStatus((s) => ({ ...s, syncing: true, error: null }));
     try {
-      const u = await cloudSignIn(email, password);
-      setCloudUser(u);
-      triggerToast(`Signed in as ${u.email ?? 'your account'}. ☁️`);
+      const dir = await syncOnLogin(backupJsonRef.current);
+      if (dir === 'conflict') {
+        const info = await detectSyncConflict(backupJsonRef.current);
+        setSyncConflictRemoteAt(info.remoteUpdatedAt);
+        setSyncConflictOpen(true);
+        setCloudSyncStatus((s) => ({ ...s, syncing: false }));
+        return;
+      }
+      if (dir === 'pulled') {
+        const ok = await applyCloudPull();
+        if (ok) {
+          setCloudSyncStatus({ lastAt: new Date().toISOString(), syncing: false, error: null });
+          triggerToast('Synced your data from the cloud. ☁️');
+        } else {
+          setCloudSyncStatus((s) => ({ ...s, syncing: false, error: 'Cloud backup could not be applied.' }));
+        }
+        return;
+      }
+      if (dir === 'pushed') {
+        setCloudSyncStatus({ lastAt: new Date().toISOString(), syncing: false, error: null });
+        triggerToast('Your data is backed up to the cloud. ☁️');
+        return;
+      }
+      setCloudSyncStatus((s) => ({ ...s, syncing: false }));
     } catch (e) {
-      triggerToast(e instanceof Error ? e.message : 'Sign-in failed.');
+      const msg = e instanceof Error ? e.message : 'Cloud sync failed.';
+      setCloudSyncStatus((s) => ({ ...s, syncing: false, error: msg }));
+      triggerToast(msg);
     }
   };
 
+  // --- Cloud sync (Supabase, optional) ---
+  const handleCloudSignIn = async (email: string, password: string) => {
+    const u = await cloudSignIn(email, password);
+    cloudAccountRef.current = u;
+    setCloudAccount(u);
+    triggerToast(`Signed in as ${u.email ?? 'your account'}. ☁️`);
+  };
+
+  const handleCloudSignInGoogle = async () => {
+    await signInWithGoogle();
+  };
+
   const handleCloudSignUp = async (email: string, password: string) => {
-    try {
-      const { needsConfirmation } = await cloudSignUp(email, password);
-      if (needsConfirmation) {
-        triggerToast('Account created — check your email to confirm, then sign in.');
-      } else {
-        const u = await getCurrentUser();
-        setCloudUser(u);
-        triggerToast('Account created and signed in. ☁️');
-      }
-    } catch (e) {
-      triggerToast(e instanceof Error ? e.message : 'Sign-up failed.');
+    const { needsConfirmation } = await cloudSignUp(email, password);
+    if (needsConfirmation) {
+      throw new Error('Account created — check your email to confirm, then sign in.');
     }
+    const u = await refreshCloudAccount();
+    if (u) triggerToast('Account created and signed in. ☁️');
+  };
+
+  const handleCloudPasswordReset = async (email: string) => {
+    await requestPasswordReset(email);
   };
 
   const handleCloudSignOut = async () => {
     await cloudSignOut();
-    setCloudUser(null);
+    cloudAccountRef.current = null;
+    setCloudAccount(null);
+    setCloudSyncStatus({ lastAt: null, syncing: false, error: null });
+    setSyncConflictOpen(false);
     triggerToast('Signed out of cloud sync.');
   };
 
   const handleCloudPush = async () => {
+    setCloudSyncStatus((s) => ({ ...s, syncing: true, error: null }));
     try {
-      await cloudPush(backupJsonString);
+      const at = await cloudPush(backupJsonString);
+      setCloudSyncStatus({ lastAt: at, syncing: false, error: null });
       triggerToast('Backed up to the cloud. ☁️✓');
     } catch (e) {
-      triggerToast(e instanceof Error ? e.message : 'Backup failed.');
+      const msg = e instanceof Error ? e.message : 'Backup failed.';
+      setCloudSyncStatus((s) => ({ ...s, syncing: false, error: msg }));
+      throw e;
     }
   };
 
   const handleCloudPull = async () => {
+    setCloudSyncStatus((s) => ({ ...s, syncing: true, error: null }));
     try {
+      const info = await detectSyncConflict(backupJsonRef.current);
+      if (info.localHasData && info.remoteHasData) {
+        setSyncConflictRemoteAt(info.remoteUpdatedAt);
+        setSyncConflictOpen(true);
+        setCloudSyncStatus((s) => ({ ...s, syncing: false }));
+        return;
+      }
       const result = await cloudPull();
       if (!result) {
+        setCloudSyncStatus((s) => ({ ...s, syncing: false }));
         triggerToast('No cloud backup found yet — back up first.');
         return;
       }
       const ok = handleImportJson(result.json);
+      setCloudSyncStatus({ lastAt: result.updatedAt, syncing: false, error: ok ? null : 'Cloud backup could not be read.' });
       triggerToast(ok ? 'Restored from the cloud. ☁️↓' : 'Cloud backup could not be read.');
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Restore failed.';
+      setCloudSyncStatus((s) => ({ ...s, syncing: false, error: msg }));
+      throw e;
+    }
+  };
+
+  const handleSyncConflictUseCloud = async () => {
+    setSyncConflictBusy(true);
+    try {
+      const ok = await applyCloudPull();
+      if (ok) {
+        setCloudSyncStatus({ lastAt: new Date().toISOString(), syncing: false, error: null });
+        triggerToast('Using your cloud backup on this device. ☁️');
+      }
+      setSyncConflictOpen(false);
+    } catch (e) {
       triggerToast(e instanceof Error ? e.message : 'Restore failed.');
+    } finally {
+      setSyncConflictBusy(false);
+    }
+  };
+
+  const handleSyncConflictKeepDevice = async () => {
+    setSyncConflictBusy(true);
+    try {
+      const at = await cloudPush(backupJsonRef.current);
+      setCloudSyncStatus({ lastAt: at, syncing: false, error: null });
+      setSyncConflictOpen(false);
+      triggerToast('This device is now your cloud backup. ☁️✓');
+    } catch (e) {
+      triggerToast(e instanceof Error ? e.message : 'Backup failed.');
+    } finally {
+      setSyncConflictBusy(false);
     }
   };
 
@@ -747,32 +841,6 @@ export const App: React.FC = () => {
     storage.saveWater(updated);
   };
 
-  // --- Body metrics ---
-  const handleAddMetric = (
-    weightKg: number,
-    unit: 'kg' | 'lb',
-    extra?: { bodyFat?: number; waist?: number }
-  ) => {
-    const entry: BodyMetric = {
-      id: `body_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      timestamp: Date.now(),
-      weight: weightKg,
-      unit,
-      bodyFat: extra?.bodyFat,
-      waist: extra?.waist,
-    };
-    const updated = [entry, ...bodyMetrics];
-    setBodyMetrics(updated);
-    storage.saveBodyMetrics(updated);
-    triggerToast('Body weight logged successfully.');
-  };
-
-  const handleDeleteMetric = (id: string) => {
-    const updated = bodyMetrics.filter((m) => m.id !== id);
-    setBodyMetrics(updated);
-    storage.saveBodyMetrics(updated);
-  };
-
   // --- Favorites / recents ---
   const recordFavorites = (items: Omit<FoodItem, 'id'>[]) => {
     let updated = [...favorites];
@@ -780,16 +848,14 @@ export const App: React.FC = () => {
       const key = item.name.trim().toLowerCase();
       if (!key) continue; // never record an unnamed/blank food as a favorite
       const idx = updated.findIndex((f) => f.name.trim().toLowerCase() === key);
+      const nutrients = copyAuxiliaryNutrients(item);
       const macros = {
         quantity: item.quantity,
         calories: item.calories,
         protein: item.protein,
         carbs: item.carbs,
         fat: item.fat,
-        sugar: item.sugar,
-        addedSugar: item.addedSugar,
-        fiber: item.fiber,
-        sodium: item.sodium,
+        ...nutrients,
       };
       if (idx >= 0) {
         updated[idx] = {
@@ -819,43 +885,6 @@ export const App: React.FC = () => {
     setFavorites(updated);
     storage.saveFavorites(updated);
   };
-
-  const handleQuickLog = (fav: FavoriteFood) => {
-    const item: Omit<FoodItem, 'id'> = {
-      name: fav.name,
-      quantity: fav.quantity,
-      calories: fav.calories,
-      protein: fav.protein,
-      carbs: fav.carbs,
-      fat: fav.fat,
-      sugar: fav.sugar,
-      addedSugar: fav.addedSugar,
-      fiber: fav.fiber,
-      sodium: fav.sodium,
-      confidence: 'high',
-    };
-    const newId = handleConfirmSave([item], null);
-    triggerToast(`Logged ${item.name} (+${Math.round(Number(item.calories) || 0)} kcal)`, {
-      label: 'Edit',
-      run: () => {
-        setStagedItems([item]);
-        setStagedWorkout(null);
-        setStagedLogType('food');
-        setStagedCoaching('Adjust this item, then save your changes.');
-        setEditingLogId(newId ?? null);
-        setStagedMealType(autoMealSlot());
-        setRefinementOpen(true);
-      },
-    });
-  };
-
-  const handleTogglePin = (id: string) => {
-    const updated = favorites.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f));
-    setFavorites(updated);
-    storage.saveFavorites(updated);
-  };
-
-
 
   // --- Meal presets / templates ---
   const handleSaveTemplate = (name: string, items: Omit<FoodItem, 'id'>[]) => {
@@ -914,35 +943,18 @@ export const App: React.FC = () => {
   // Log a portion of a recipe: scale each ingredient by `ratio` and route through
   // the standard save path (toast/confetti/favorites all handled there).
   const handleLogRecipePortion = (recipe: Recipe, ratio: number, portionName: string) => {
-    const items: Omit<FoodItem, 'id'>[] = recipe.ingredients.map((ing) => ({
-      name: `${ing.name} (from ${recipe.name})`,
-      quantity: ing.quantity,
-      calories: Math.round((Number(ing.calories) || 0) * ratio),
-      protein: Math.round((Number(ing.protein) || 0) * ratio * 10) / 10,
-      carbs: Math.round((Number(ing.carbs) || 0) * ratio * 10) / 10,
-      fat: Math.round((Number(ing.fat) || 0) * ratio * 10) / 10,
-      sugar: ing.sugar != null ? Math.round(ing.sugar * ratio * 10) / 10 : undefined,
-      addedSugar: ing.addedSugar != null ? Math.round(ing.addedSugar * ratio * 10) / 10 : undefined,
-      fiber: ing.fiber != null ? Math.round(ing.fiber * ratio * 10) / 10 : undefined,
-      sodium: ing.sodium != null ? Math.round(ing.sodium * ratio) : undefined,
-      iron: ing.iron != null ? Math.round(ing.iron * ratio * 10) / 10 : undefined,
-      calcium: ing.calcium != null ? Math.round(ing.calcium * ratio) : undefined,
-      potassium: ing.potassium != null ? Math.round(ing.potassium * ratio) : undefined,
-      cholesterol: ing.cholesterol != null ? Math.round(ing.cholesterol * ratio) : undefined,
-      saturatedFat: ing.saturatedFat != null ? Math.round(ing.saturatedFat * ratio * 10) / 10 : undefined,
-      transFat: ing.transFat != null ? Math.round(ing.transFat * ratio * 10) / 10 : undefined,
-      vitaminA: ing.vitaminA != null ? Math.round(ing.vitaminA * ratio * 10) / 10 : undefined,
-      vitaminC: ing.vitaminC != null ? Math.round(ing.vitaminC * ratio * 10) / 10 : undefined,
-      vitaminD: ing.vitaminD != null ? Math.round(ing.vitaminD * ratio * 10) / 10 : undefined,
-      zinc: ing.zinc != null ? Math.round(ing.zinc * ratio * 10) / 10 : undefined,
-      magnesium: ing.magnesium != null ? Math.round(ing.magnesium * ratio) : undefined,
-      folate: ing.folate != null ? Math.round(ing.folate * ratio * 10) / 10 : undefined,
-      micros: ing.micros ? Object.entries(ing.micros).reduce((acc, [key, val]) => {
-        acc[key] = Math.round(val * ratio * 100) / 100;
-        return acc;
-      }, {} as Record<string, number>) : undefined,
-      confidence: 'high',
-    }));
+    const items: Omit<FoodItem, 'id'>[] = recipe.ingredients.map((ing) => {
+      const scaled = scaleNutrients(
+        { ...ing, name: ing.name, quantity: ing.quantity, confidence: 'high' },
+        ratio
+      );
+      return {
+        ...scaled,
+        name: `${ing.name} (from ${recipe.name})`,
+        quantity: ing.quantity,
+        confidence: 'high' as const,
+      };
+    });
     if (items.length === 0) return;
     handleConfirmSave(items, null);
     triggerToast(`Logged ${portionName} of ${recipe.name}. 🍽️`);
@@ -986,57 +998,8 @@ export const App: React.FC = () => {
       theme: 'obsidian',
       visibleMacros: { protein: true, carbs: true, fat: true },
       visibleMicros: { addedSugar: true, fiber: true, sodium: true },
-      visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: true, mealSlots: true, goalCompletion: true, water: true, streak: true }
+      visibleWidgets: { calorieHalo: true, macros: true, micros: true, workouts: false, mealSlots: true, goalCompletion: true, water: true, streak: true, supplements: true }
     });
-  };
-
-  // Callback handler for AI customization actions
-  const handleCustomizationSuccess = (
-    updatedGoals: Partial<UserGoals>,
-    updatedSettings: Partial<AppSettings>,
-    message: string
-  ) => {
-    let newGoals = { ...goals };
-    if (Object.keys(updatedGoals).length > 0) {
-      // Clamp every AI/voice-driven goal change to safe bounds so a hallucinated
-      // or fat-fingered command ("set calories to 10000") can't corrupt the budget.
-      newGoals = { ...goals };
-      (Object.keys(updatedGoals) as (keyof UserGoals)[]).forEach((k) => {
-        if (k in GOAL_BOUNDS) {
-          newGoals[k] = clampGoal(k, Number(updatedGoals[k]), goals[k] ?? GOAL_BOUNDS[k].min);
-        }
-      });
-      setGoals(newGoals);
-      storage.saveGoals(newGoals);
-    }
-
-    let newSettings = { ...appSettings };
-    if (Object.keys(updatedSettings).length > 0) {
-      newSettings = {
-        ...appSettings,
-        ...updatedSettings,
-        visibleMacros: {
-          ...appSettings.visibleMacros,
-          ...(updatedSettings.visibleMacros || {})
-        },
-        visibleMicros: {
-          ...appSettings.visibleMicros,
-          ...(updatedSettings.visibleMicros || {})
-        },
-        visibleWidgets: {
-          ...appSettings.visibleWidgets,
-          ...(updatedSettings.visibleWidgets || {})
-        }
-      };
-      if (updatedSettings.theme) {
-        newSettings.theme = updatedSettings.theme;
-      }
-      setAppSettings(newSettings);
-      storage.saveAppSettings(newSettings);
-    }
-
-    triggerToast(message);
-    fireConfetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
   };
 
   const handleSaveReminders = async (reminders: import('./types/nutrition').MealReminders) => {
@@ -1073,10 +1036,66 @@ export const App: React.FC = () => {
     // The native scheduling sync is handled by the useEffect above
   };
 
-  const handleTriggerCustomize = (scope: 'general' | 'macronutrients' | 'micronutrients' | 'widgets') => {
-    setCustomizerScope(scope);
-    setCustomizerOpen(true);
-  };
+  const backupJsonString = useMemo(() => JSON.stringify({
+    logs,
+    workouts,
+    goals,
+    geminiKey,
+    coachPersonality,
+    appSettings,
+    waterLogs,
+    bodyMetrics,
+    favorites,
+    profile,
+    mealTemplates,
+    recipes,
+    supplements,
+  }), [logs, workouts, goals, geminiKey, coachPersonality, appSettings, waterLogs, bodyMetrics, favorites, profile, mealTemplates, recipes, supplements]);
+
+  backupJsonRef.current = backupJsonString;
+  importJsonRef.current = handleImportJson;
+
+  const aiAccess = useMemo<AiAccess>(() => ({
+    provider: appSettings.aiProvider ?? (isHostedAiAvailable() ? 'hosted' : 'custom'),
+    customApiKey: geminiKey,
+    cloudSignedIn: !!cloudAccount,
+  }), [appSettings.aiProvider, geminiKey, cloudAccount]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    refreshCloudAccount().catch(() => {
+      cloudAccountRef.current = null;
+      setCloudAccount(null);
+    });
+    const unsub = onAuthChange(async (user, event) => {
+      cloudAccountRef.current = user;
+      setCloudAccount(user);
+      if (event === 'SIGNED_IN' && user && isLoaded) {
+        await refreshCloudAccount();
+        await runPostLoginSync();
+      }
+      if (event === 'SIGNED_OUT') {
+        setCloudSyncStatus({ lastAt: null, syncing: false, error: null });
+        setSyncConflictOpen(false);
+      }
+    });
+    return unsub;
+  }, [isLoaded]);
+
+  useEffect(() => {
+    if (!cloudAccount || !isLoaded) return;
+    setCloudSyncStatus((s) => ({ ...s, syncing: true, error: null }));
+    const timer = setTimeout(() => {
+      cloudPush(backupJsonRef.current)
+        .then((at) => setCloudSyncStatus({ lastAt: at, syncing: false, error: null }))
+        .catch((e) => setCloudSyncStatus((s) => ({
+          ...s,
+          syncing: false,
+          error: e instanceof Error ? e.message : 'Auto-sync failed.',
+        })));
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [cloudAccount, isLoaded, backupJsonString]);
 
   if (!isLoaded) {
     return (
@@ -1100,26 +1119,8 @@ export const App: React.FC = () => {
     );
   }
 
-  // Get raw serialization strings for backup downloads
-  const backupJsonString = JSON.stringify({
-    logs,
-    workouts,
-    goals,
-    geminiKey,
-    coachPersonality,
-    appSettings,
-    waterLogs,
-    bodyMetrics,
-    favorites,
-    profile,
-    mealTemplates,
-    recipes,
-    supplements
-  });
-
   // Derived dashboard values
   const streak = computeStreak(logs);
-  const lifetimeDays = totalLoggedDays(logs);
 
   // Today's already-logged calories/burn over the half-open [start,end) day window
   // (matches dailyTotals/insights so future-dated entries can't leak in). Consumed
@@ -1139,7 +1140,7 @@ export const App: React.FC = () => {
       
       {/* 1. Header Layout & Navigation Tabs */}
       <header className="header">
-        <div className="logo-container" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <div className="logo-container motion-enter" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <img
             src="/logo.svg"
             alt="HelloCal Logo"
@@ -1181,7 +1182,10 @@ export const App: React.FC = () => {
             document.getElementById(`tab-${nextKey}`)?.focus();
           }}
         >
-          {NAV_TABS.map(({ key, label, Icon }) => (
+          {NAV_TABS.map(({ key, label, Icon }) => {
+            const remindersConfigured =
+              appSettings.reminders?.enabled || appSettings.supplementReminders?.enabled;
+            return (
             <button
               key={key}
               role="tab"
@@ -1189,76 +1193,64 @@ export const App: React.FC = () => {
               aria-controls={`panel-${key}`}
               aria-selected={activeTab === key}
               tabIndex={activeTab === key ? 0 : -1}
-              className={`tab-btn ${activeTab === key ? 'active' : ''}`}
+              className={`tab-btn${activeTab === key ? ' active' : ''}${key === 'dashboard' ? ' tab-btn--hub' : ''}`}
               onClick={() => setActiveTab(key)}
             >
               <Icon size={16} />
               <span>{label}</span>
+              {key === 'settings' && !remindersConfigured ? (
+                <span className="tab-badge" title="Reminders available in Settings" aria-label="Reminders not enabled" />
+              ) : null}
             </button>
-          ))}
+            );
+          })}
         </nav>
       </header>
 
-      {/* 2. Main Voice Action Console */}
-      <section style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'center' }}>
-        <VoiceInput
-          apiKey={geminiKey}
-          personality={coachPersonality}
-          onParsingSuccess={handleLoggingSuccess}
-          onError={(msg) => triggerToast(msg)}
-          onOpenSettings={() => setActiveTab('settings')}
-          onOpenSearch={() => setSearchOpen(true)}
-          weightKg={profile.weightKg}
-        />
-      </section>
-
-      {/* 3. Dynamic Tab Portals */}
+      {/* Dynamic Tab Portals */}
       <main style={{ flex: 1, marginBottom: '3rem' }}>
         {activeTab === 'dashboard' && (
-          <div role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <QuickLogBar
-              favorites={favorites}
-              onQuickLog={handleQuickLog}
-              onTogglePin={handleTogglePin}
-            />
-            <MealTemplateBar
-              templates={mealTemplates}
-              onApply={handleApplyTemplate}
-              onDelete={handleDeleteTemplate}
-            />
+          <div role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard" className="motion-tab-panel dashboard-tab-panel">
             <Dashboard
               logs={logs}
               workouts={workouts}
               goals={goals}
               appSettings={appSettings}
-              onTriggerCustomize={handleTriggerCustomize}
               onSaveGoals={handleSaveGoals}
               onSaveAppSettings={handleSaveAppSettings}
-              apiKey={geminiKey}
+              aiAccess={aiAccess}
               onError={(msg) => triggerToast(msg)}
+              waterLogs={waterLogs}
+              onAddWater={handleAddWater}
+              onRemoveWater={handleRemoveWater}
+              supplements={supplements}
+              onSaveSupplements={handleSaveSupplements}
+              onToggleSupplement={handleToggleSupplement}
+              voiceSlot={(
+                <VoiceInput
+                  aiAccess={aiAccess}
+                  personality={coachPersonality}
+                  onParsingSuccess={handleLoggingSuccess}
+                  onError={(msg) => triggerToast(msg)}
+                  onOpenSettings={() => setActiveTab('settings')}
+                  weightKg={profile.weightKg}
+                />
+              )}
+              mealPresetsSlot={
+                mealTemplates.length > 0 ? (
+                  <MealTemplateBar
+                    templates={mealTemplates}
+                    onApply={handleApplyTemplate}
+                    onDelete={handleDeleteTemplate}
+                  />
+                ) : null
+              }
             />
-            {appSettings.visibleWidgets.water !== false && (
-              <HydrationTracker
-                logs={waterLogs.map((w) => ({ id: w.id, timestamp: w.timestamp, amount: w.milliliters }))}
-                goals={{ ...goals, hydration: goals.hydration ?? goals.waterTarget ?? 2000 }}
-                onAddWater={handleAddWater}
-                onRemoveWater={handleRemoveWater}
-              />
-            )}
-            {appSettings.visibleWidgets.supplements !== false && (
-              <SupplementTracker
-                supplements={supplements}
-                apiKey={geminiKey}
-                onSave={handleSaveSupplements}
-                onToggleTaken={handleToggleSupplement}
-                onError={(msg) => triggerToast(msg)}
-              />
-            )}
           </div>
         )}
         
         {activeTab === 'timeline' && (
-          <div role="tabpanel" id="panel-timeline" aria-labelledby="tab-timeline">
+          <div role="tabpanel" id="panel-timeline" aria-labelledby="tab-timeline" className="motion-tab-panel">
             <FoodTimeline
               logs={logs}
               workouts={workouts}
@@ -1270,14 +1262,21 @@ export const App: React.FC = () => {
               onScaleItem={handleScaleItem}
               goals={goals}
               customMicros={appSettings.customMicros}
+              aiAccess={aiAccess}
+              personality={coachPersonality}
+              onLoggingSuccess={handleLoggingSuccess}
+              onError={(msg) => triggerToast(msg)}
+              onOpenSettings={() => setActiveTab('settings')}
+              weightKg={profile.weightKg}
+              focusDateTs={timelineFocusDate}
             />
           </div>
         )}
 
         {activeTab === 'recipes' && (
-          <div role="tabpanel" id="panel-recipes" aria-labelledby="tab-recipes">
+          <div role="tabpanel" id="panel-recipes" aria-labelledby="tab-recipes" className="motion-tab-panel">
             <Suspense fallback={
-              <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
+              <div className="glass-card motion-enter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
                 Loading recipes…
               </div>
             }>
@@ -1286,39 +1285,44 @@ export const App: React.FC = () => {
                 onSaveRecipes={handleSaveRecipes}
                 onLogRecipePortion={handleLogRecipePortion}
                 onTriggerToast={triggerToast}
-                apiKey={geminiKey}
+                aiAccess={aiAccess}
               />
             </Suspense>
           </div>
         )}
 
         {activeTab === 'analytics' && (
-          <div role="tabpanel" id="panel-analytics" aria-labelledby="tab-analytics" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div role="tabpanel" id="panel-analytics" aria-labelledby="tab-analytics" className="motion-tab-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <Suspense fallback={
-              <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
+              <div className="glass-card motion-enter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
                 Loading analytics…
               </div>
             }>
-              <Analytics logs={logs} workouts={workouts} goals={goals} />
-              <WeightTracker
-                metrics={bodyMetrics}
-                preferredUnit={profile.preferredWeightUnit || 'kg'}
-                onAddMetric={handleAddMetric}
-                onDeleteMetric={handleDeleteMetric}
+              <Analytics
+                logs={logs}
+                goals={goals}
+                appSettings={appSettings}
+                waterLogs={waterLogs}
+                supplements={supplements}
+                onNavigateToDay={(dayStartTs) => {
+                  setTimelineFocusDate(dayStartTs);
+                  setActiveTab('timeline');
+                }}
               />
             </Suspense>
           </div>
         )}
         
         {activeTab === 'settings' && (
-          <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings">
+          <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" className="motion-tab-panel">
             <Settings
               apiKey={geminiKey}
+              aiProvider={appSettings.aiProvider ?? (isHostedAiAvailable() ? 'hosted' : 'custom')}
+              hostedAiAvailable={isHostedAiAvailable()}
               personality={coachPersonality}
-              goals={goals}
               onSaveKey={handleSaveKey}
+              onSaveAiProvider={handleSaveAiProvider}
               onSavePersonality={handleSavePersonality}
-              onSaveGoals={handleSaveGoals}
               onClearData={handleClearData}
               onImportData={handleImportJson}
               exportDataJson={backupJsonString}
@@ -1327,9 +1331,12 @@ export const App: React.FC = () => {
               supplementReminders={appSettings.supplementReminders}
               onSaveSupplementReminders={handleSaveSupplementReminders}
               cloudConfigured={isSupabaseConfigured()}
-              cloudUser={cloudUser ? { email: cloudUser.email } : null}
+              cloudAccount={cloudAccount}
+              cloudSyncStatus={cloudSyncStatus}
               onCloudSignIn={handleCloudSignIn}
               onCloudSignUp={handleCloudSignUp}
+              onCloudSignInGoogle={handleCloudSignInGoogle}
+              onCloudPasswordReset={handleCloudPasswordReset}
               onCloudSignOut={handleCloudSignOut}
               onCloudPush={handleCloudPush}
               onCloudPull={handleCloudPull}
@@ -1338,16 +1345,26 @@ export const App: React.FC = () => {
         )}
       </main>
 
+      {/* Sync conflict resolution */}
+      <SyncConflictModal
+        open={syncConflictOpen}
+        remoteUpdatedAt={syncConflictRemoteAt}
+        busy={syncConflictBusy}
+        onUseCloud={handleSyncConflictUseCloud}
+        onKeepDevice={handleSyncConflictKeepDevice}
+        onDismiss={() => setSyncConflictOpen(false)}
+      />
+
       {/* 4. Interactive Staged Review Modal */}
       <RefinementModal
         isOpen={refinementOpen}
-        onClose={() => { setRefinementOpen(false); setEditingLogId(null); setStagedMealType(undefined); }}
+        onClose={() => { setRefinementOpen(false); setEditingLogId(null); setStagedMealType(undefined); setStagedLogTimestamp(undefined); }}
         parsedItems={stagedItems}
         parsedWorkout={stagedWorkout}
         logType={stagedLogType}
         onSave={handleConfirmSave}
         coachingMessage={stagedCoaching}
-        apiKey={geminiKey}
+        aiAccess={aiAccess}
         personality={coachPersonality}
         calorieGoal={(goals.calories || 2000) + todayBurnedCalories}
         consumedToday={todayConsumedCalories}
@@ -1355,7 +1372,7 @@ export const App: React.FC = () => {
         weightKg={profile.weightKg}
         initialMealType={stagedMealType}
         isEditing={editingLogId !== null}
-        initialTimestamp={editingLogId ? logs.find((l) => l.id === editingLogId)?.timestamp : undefined}
+        initialTimestamp={editingLogId ? logs.find((l) => l.id === editingLogId)?.timestamp : stagedLogTimestamp}
       />
 
       {/* 5. Sleek Toast Notification Banner */}
@@ -1392,14 +1409,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* 5.2. Open Food Facts search drawer */}
-      <FoodSearchDrawer
-        isOpen={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onPick={handleSearchPick}
-      />
-
-      {/* 5.3. Custom PWA install prompt */}
+      {/* 5.2. Custom PWA install prompt */}
       <InstallPrompt />
 
       {/* 5.4. First-run Onboarding / TDEE wizard */}
@@ -1410,20 +1420,8 @@ export const App: React.FC = () => {
         onSkip={handleSkipOnboarding}
       />
 
-      {/* 5.5. AI Customizer Bottom Sheet Drawer */}
-      <AiCustomizerDrawer
-        isOpen={customizerOpen}
-        onClose={() => setCustomizerOpen(false)}
-        currentGoals={goals}
-        currentSettings={appSettings}
-        apiKey={geminiKey}
-        scope={customizerScope}
-        onCustomizationSuccess={handleCustomizationSuccess}
-        onError={(msg) => triggerToast(msg)}
-      />
-
       {/* 6. Footer Signature */}
-      <footer style={{
+      <footer className="motion-enter" style={{
         textAlign: 'center',
         padding: '1rem 0',
         fontSize: '0.75rem',

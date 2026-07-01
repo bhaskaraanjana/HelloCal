@@ -68,13 +68,11 @@ test('instant-logged item can be backfilled to a past date via Edit', async ({ p
 test('Analytics tab renders the period selector + charts (the fixed feature)', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: /Analytics/ }).click();
-  // Upstream period-aware Analytics: 7/14/30-day selector buttons.
-  await expect(page.getByRole('button', { name: '7 Days', exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('button', { name: '30 Days', exact: true })).toBeVisible();
-  // A chart canvas actually mounts (validates Chart.js works in a real browser).
+  await expect(page.getByRole('button', { name: '7D', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: '90D', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible();
   await expect(page.locator('canvas').first()).toBeVisible();
-  // Switching period keeps charts mounted (no crash).
-  await page.getByRole('button', { name: '30 Days', exact: true }).click();
+  await page.getByRole('button', { name: '30D', exact: true }).click();
   await expect(page.locator('canvas').first()).toBeVisible();
 });
 

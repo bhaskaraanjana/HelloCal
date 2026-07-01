@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera, ScanLine, Search } from 'lucide-react';
+import { Mic, MicOff, Send, Sparkles, AlertCircle, Camera, ScanLine } from 'lucide-react';
 import { gemini } from '../services/gemini';
 import { localParser } from '../services/localParser';
 import { capturePhotoNative, isNative } from '../services/native';
@@ -7,24 +7,23 @@ import { scanBarcodeNative } from '../services/barcode';
 import { lookupBarcode, barcodeResultToCoachResponse } from '../services/foodDb';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { CoachPersonality, CoachResponse } from '../types/nutrition';
+import { isAiReady, type AiAccess } from '../services/aiRuntime';
 
 interface VoiceInputProps {
-  apiKey: string;
+  aiAccess: AiAccess;
   personality: CoachPersonality;
   onParsingSuccess: (response: CoachResponse) => void;
   onError: (message: string) => void;
   onOpenSettings?: () => void;
-  onOpenSearch?: () => void;
   weightKg?: number;
 }
 
 export const VoiceInput: React.FC<VoiceInputProps> = ({
-  apiKey,
+  aiAccess,
   personality,
   onParsingSuccess,
   onError,
   onOpenSettings,
-  onOpenSearch,
   weightKg
 }) => {
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
@@ -99,18 +98,22 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   };
 
+  const aiReady = isAiReady(aiAccess);
+
   // Upload/Process Audio Blob
   const processAudio = async (blob: Blob) => {
-    if (!apiKey) {
+    if (!aiReady) {
       setStatus('idle');
-      const errorMsg = 'Gemini API Key is required to process audio logs. Please enter a key in Settings, or type your meals below!';
+      const errorMsg = aiAccess.provider === 'hosted'
+        ? 'Sign in with Google in Settings to use voice logging, or type your meals below.'
+        : 'Gemini API key is required to process audio. Add a key in Settings, or type your meals below!';
       setMicError(errorMsg);
       onError(errorMsg);
       return;
     }
 
     try {
-      const parsedData = await gemini.parseVoice(blob, apiKey, personality, weightKg);
+      const parsedData = await gemini.parseVoice(blob, aiAccess, personality, weightKg);
       onParsingSuccess(parsedData);
     } catch (err: any) {
       console.error('Gemini Audio Error:', err);
@@ -122,8 +125,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
   // Shared image-processing pipeline (used by both web upload and native camera).
   const processImageBlob = async (blob: Blob) => {
-    if (!apiKey) {
-      const errorMsg = 'Gemini API Key is required for visual food photo scanning. Please enter a key in Settings!';
+    if (!aiReady) {
+      const errorMsg = aiAccess.provider === 'hosted'
+        ? 'Sign in with Google in Settings to use photo scanning.'
+        : 'Gemini API key is required for photo scanning. Add a key in Settings!';
       setMicError(errorMsg);
       onError(errorMsg);
       return;
@@ -133,7 +138,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     setMicError(null);
 
     try {
-      const parsedData = await gemini.parseImage(blob, apiKey, personality, weightKg);
+      const parsedData = await gemini.parseImage(blob, aiAccess, personality, weightKg);
       onParsingSuccess(parsedData);
     } catch (err: any) {
       console.error('Gemini Photo Error:', err);
@@ -155,8 +160,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
   // Camera button: native camera on device, file picker on web.
   const handleCameraClick = async () => {
-    if (!apiKey) {
-      const errorMsg = 'Gemini API Key is required for visual food photo scanning. Please enter a key in Settings!';
+    if (!aiReady) {
+      const errorMsg = aiAccess.provider === 'hosted'
+        ? 'Sign in with Google in Settings to use photo scanning.'
+        : 'Gemini API key is required for photo scanning. Add a key in Settings!';
       setMicError(errorMsg);
       onError(errorMsg);
       return;
@@ -215,8 +222,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     setMicError(null);
 
     try {
-      if (apiKey) {
-        const parsedData = await gemini.parseText(query, apiKey, personality, weightKg);
+      if (aiReady) {
+        const parsedData = await gemini.parseText(query, aiAccess, personality, weightKg);
         onParsingSuccess(parsedData);
       } else {
         const parsedData = localParser.parseText(query);
@@ -231,7 +238,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+    <div className="voice-log-root">
       
       {/* Hidden File Input for Native PWA Camera Uploader */}
       <input 
@@ -245,18 +252,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
       {/* Logging Area Card */}
       <div 
-        className="glass-card" 
+        className={`glass-card voice-log-card${status === 'recording' ? ' is-recording' : ''}`}
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '1.5rem',
-          padding: '2.5rem 2rem',
-          textAlign: 'center',
-          border: status === 'recording' ? '1px solid var(--accent-purple)' : '1px solid var(--border-glass)',
-          background: status === 'recording' ? 'rgba(139, 92, 246, 0.04)' : 'var(--bg-glass)',
-          boxShadow: status === 'recording' ? '0 0 30px var(--accent-purple-glow)' : '0 8px 32px 0 rgba(0,0,0,0.3)',
           position: 'relative',
           overflow: 'hidden'
         }}
@@ -273,49 +270,52 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           }} />
         )}
 
-        {/* Text Guidelines */}
-        <div style={{ zIndex: 1 }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-            {status === 'idle' && 'Log Food or Workout'}
-            {status === 'recording' && 'Listening...'}
-            {status === 'processing' && 'AI Scanner Thinking...'}
-            {apiKey && <Sparkles size={18} color="var(--accent-purple)" style={{ animation: 'float 2s infinite' }} />}
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '420px', margin: '0 auto' }}>
-            {status === 'idle' && (
-              apiKey
-                ? 'Talk, snap a food photo, scan a barcode, or type below! (e.g. "I did a 40 min run")'
-                : 'Scan a barcode or type your food/workouts below. Add a Gemini API key in Settings to unlock voice & photo AI tracking!'
-            )}
-            {status === 'recording' && 'Speak clearly! Mention ingredients, portions, or workout duration.'}
-            {status === 'processing' && 'Gemini is scanning visual details and scaling metrics...'}
-          </p>
-        </div>
-
-        {/* Dynamic Waveform Visualizer when recording */}
-        {status === 'recording' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', height: '40px', zIndex: 1 }}>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((bar) => {
-              const animDuration = 0.5 + Math.random() * 0.7;
-              return (
-                <div 
-                  key={bar}
-                  style={{
-                    width: '4px',
-                    backgroundColor: 'var(--accent-purple)',
-                    borderRadius: '99px',
-                    height: '100%',
-                    animation: `wave ${animDuration}s ease-in-out infinite`,
-                    boxShadow: '0 0 8px var(--accent-purple-glow)'
-                  }}
-                />
-              );
-            })}
+        {/* Text Guidelines + actions */}
+        <div className="voice-log-card__hero" style={{ zIndex: 1 }}>
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              {status === 'idle' && 'Log Food'}
+              {status === 'recording' && 'Listening...'}
+              {status === 'processing' && 'AI Scanner Thinking...'}
+              {aiReady && <Sparkles size={16} color="var(--accent-purple)" style={{ animation: 'float 2s infinite' }} />}
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', maxWidth: '420px', margin: '0 auto', lineHeight: 1.45 }}>
+              {status === 'idle' && (
+                aiReady
+                  ? 'Talk, snap a photo, scan a barcode, or type below.'
+                  : aiAccess.provider === 'hosted'
+                    ? 'Sign in with Google in Settings for voice & photo AI, or type / scan a barcode now.'
+                    : 'Scan a barcode or type what you ate. Add a Gemini key in Settings for voice & photo.'
+              )}
+              {status === 'recording' && 'Speak clearly — mention ingredients and portions.'}
+              {status === 'processing' && 'Gemini is scanning visual details and scaling metrics...'}
+            </p>
           </div>
-        )}
 
-        {/* Action Buttons Group */}
-        <div style={{ zIndex: 1, display: 'flex', gap: '1.5rem', alignItems: 'center', justifyContent: 'center' }}>
+          {/* Dynamic Waveform Visualizer when recording */}
+          {status === 'recording' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', height: '36px' }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((bar) => {
+                const animDuration = 0.5 + Math.random() * 0.7;
+                return (
+                  <div 
+                    key={bar}
+                    style={{
+                      width: '4px',
+                      backgroundColor: 'var(--accent-purple)',
+                      borderRadius: '99px',
+                      height: '100%',
+                      animation: `wave ${animDuration}s ease-in-out infinite`,
+                      boxShadow: '0 0 8px var(--accent-purple-glow)'
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          {/* Action Buttons Group */}
+          <div className="voice-log-card__actions">
           {status === 'idle' ? (
             <>
               {/* Voice Pill */}
@@ -451,6 +451,27 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               }}
             />
           )}
+          </div>
+
+          {/* Error warning info */}
+          {micError && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.55rem 0.85rem',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(244, 63, 94, 0.08)',
+              border: '1px solid rgba(244, 63, 94, 0.15)',
+              color: '#fda4af',
+              fontSize: '0.82rem',
+              maxWidth: '450px',
+              margin: '0 auto'
+            }}>
+              <AlertCircle size={16} />
+              <span>{micError}</span>
+            </div>
+          )}
         </div>
 
         {/* Custom spin style injection */}
@@ -460,147 +481,77 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           }
         `}} />
 
-        {/* Error warning info */}
-        {micError && (
+        {!aiReady && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.6rem 1rem',
-            borderRadius: '10px',
-            backgroundColor: 'rgba(244, 63, 94, 0.08)',
-            border: '1px solid rgba(244, 63, 94, 0.15)',
-            color: '#fda4af',
-            fontSize: '0.85rem',
-            maxWidth: '450px',
-            zIndex: 1
-          }}>
-            <AlertCircle size={16} />
-            <span>{micError}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Search the food database — no key needed, surfaces millions of products. */}
-      {onOpenSearch && (
-        <button
-          type="button"
-          onClick={onOpenSearch}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem',
-            width: '100%',
-            padding: '0.7rem 1rem',
-            borderRadius: '14px',
-            background: 'var(--bg-glass)',
+            gap: '0.6rem',
+            padding: '0.55rem 0.75rem',
+            borderRadius: '12px',
+            background: 'rgba(139, 92, 246, 0.06)',
             border: '1px solid var(--border-glass)',
             color: 'var(--text-secondary)',
-            fontSize: '0.88rem',
-            fontWeight: 600,
-            fontFamily: 'var(--font-display)',
-            cursor: 'pointer',
-            transition: 'var(--transition-smooth)'
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent-purple)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-glass)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-        >
-          <Search size={16} color="var(--accent-purple)" />
-          Search the food database
-        </button>
-      )}
+            fontSize: '0.8rem',
+            lineHeight: 1.4,
+            textAlign: 'left'
+          }}>
+            <Sparkles size={15} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>
+              {aiAccess.provider === 'hosted'
+                ? 'Voice & photo AI use HelloCal’s cloud — sign in with Google in Settings. Typing & barcode scanning work now.'
+                : 'Voice & photo logging need a Gemini key in Settings. Typing & barcode scanning work right now.'}
+            </span>
+              {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                style={{
+                  flexShrink: 0,
+                  background: 'rgba(139, 92, 246, 0.16)',
+                  border: '1px solid var(--border-glass-glow)',
+                  color: 'var(--accent-purple)',
+                  borderRadius: '99px',
+                  padding: '0.25rem 0.75rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {aiAccess.provider === 'hosted' ? 'Sign in' : 'Add key'}
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* No-key disclosure: explain up front that voice/photo/barcode need a key,
-          so users aren't surprised by an error only after tapping. Typing is free. */}
-      {!apiKey && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.6rem',
-          padding: '0.6rem 0.9rem',
-          borderRadius: '12px',
-          background: 'rgba(139, 92, 246, 0.06)',
-          border: '1px solid var(--border-glass)',
-          color: 'var(--text-secondary)',
-          fontSize: '0.82rem',
-          lineHeight: 1.4
-        }}>
-          <Sparkles size={15} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>
-            Voice &amp; photo logging need a free Gemini key. Typing &amp; barcode scanning work right now.
-          </span>
-          {onOpenSettings && (
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              style={{
-                flexShrink: 0,
-                background: 'rgba(139, 92, 246, 0.16)',
-                border: '1px solid var(--border-glass-glow)',
-                color: 'var(--accent-purple)',
-                borderRadius: '99px',
-                padding: '0.25rem 0.75rem',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              Add key
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Text fallback input bar */}
-      <form onSubmit={handleTextSubmit} style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
-          <input 
+        <form onSubmit={handleTextSubmit} className="voice-log-form">
+          <input
             type="text"
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Or type what you ate or your workout (e.g. 'Ran for 30 minutes' or 'Oatmeal')..."
+            placeholder="Type what you ate (e.g. oatmeal with berries)..."
             disabled={status === 'processing'}
-            style={{
-              width: '100%',
-              background: 'var(--bg-glass)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '16px',
-              padding: '1rem 1.25rem',
-              color: 'var(--text-primary)',
-              fontSize: '0.95rem',
-              outline: 'none',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-              transition: 'var(--transition-smooth)'
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent-purple)';
-              e.currentTarget.style.boxShadow = '0 4px 25px var(--accent-purple-glow)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-glass)';
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
-            }}
+            className="input-field"
+            aria-label="Type what you ate"
           />
-        </div>
-        <button
-          type="submit"
-          disabled={status === 'processing' || !textInput.trim()}
-          aria-label="Log typed entry"
-          className="btn btn-primary"
-          style={{
-            borderRadius: '16px',
-            padding: '0 1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: (!textInput.trim() || status === 'processing') ? 0.6 : 1,
-            cursor: (!textInput.trim() || status === 'processing') ? 'not-allowed' : 'pointer'
-          }}
-        >
-          <Send size={18} />
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={status === 'processing' || !textInput.trim()}
+            aria-label="Log typed entry"
+            className="btn btn-primary"
+            style={{
+              borderRadius: '14px',
+              padding: '0 1.15rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: (!textInput.trim() || status === 'processing') ? 0.6 : 1,
+              cursor: (!textInput.trim() || status === 'processing') ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <Send size={18} />
+          </button>
+        </form>
+      </div>
 
       {/* Web barcode scanner modal (native uses the ML Kit full-screen scanner instead) */}
       <BarcodeScanner

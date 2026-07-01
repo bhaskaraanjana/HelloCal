@@ -195,5 +195,32 @@ describe('coerceFoodItem dynamic micros', () => {
       selenium: 25,
     });
   });
+
+  it('promotes catalog micros from micros-only AI output to top-level fields', () => {
+    const item = coerceFoodItem({
+      name: 'Yogurt',
+      calories: 120,
+      protein: 12,
+      carbs: 10,
+      fat: 3,
+      micros: { fiber: 4.5, potassium: 380, omega3: 0.3 },
+    });
+    expect(item?.fiber).toBe(4.5);
+    expect(item?.potassium).toBe(380);
+    expect(item?.micros).toEqual({ omega3: 0.3 });
+  });
+
+  it('resolves aliased root keys (addedsugar) onto addedSugar', () => {
+    const item = coerceFoodItem({
+      name: 'Cereal',
+      calories: 150,
+      protein: 3,
+      carbs: 30,
+      fat: 2,
+      addedsugar: 8,
+    });
+    expect(item?.addedSugar).toBe(8);
+    expect(item?.micros?.addedsugar).toBeUndefined();
+  });
 });
 

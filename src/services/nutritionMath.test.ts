@@ -1,10 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { calcBMR, calcTDEE, deriveGoals, kgToLb, lbToKg } from './nutritionMath';
+import { calcBMR, calcTDEE, deriveGoals, kgToLb, lbToKg, cmToFeetInches, feetInchesToCm } from './nutritionMath';
 import type { UserProfile } from '../types/nutrition';
 
 describe('weight conversions', () => {
   it('round-trips kg <-> lb', () => {
     expect(lbToKg(kgToLb(80))).toBeCloseTo(80, 6);
+  });
+});
+
+describe('height conversions', () => {
+  it('converts 180 cm to 5 ft 11 in', () => {
+    expect(cmToFeetInches(180)).toEqual({ feet: 5, inches: 11 });
+  });
+  it('round-trips feet/inches to cm', () => {
+    expect(feetInchesToCm(5, 11)).toBeCloseTo(180, 0);
   });
 });
 

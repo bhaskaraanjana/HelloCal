@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import type { UserGoals, CoachPersonality, MealReminders, SupplementReminders } from '../types/nutrition';
-import { clampGoal } from '../services/validation';
+import type { CoachPersonality, MealReminders, SupplementReminders } from '../types/nutrition';
+import type { AiProvider } from '../services/aiRuntime';
 import { shareText, isNative } from '../services/native';
-import { Eye, EyeOff, Sparkles, Goal, ShieldAlert, Key, HardDriveDownload, HardDriveUpload, Bell, Cloud, CloudUpload, CloudDownload, LogOut, Pill } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, ShieldAlert, Key, HardDriveDownload, HardDriveUpload, Bell, Cloud, Pill } from 'lucide-react';
+import { APP_VERSION, COMMIT_HASH } from '../version';
+import { AccountSection, type CloudSyncStatus } from './AccountSection';
+import type { CloudAccount } from '../services/cloudSync';
 
 interface SettingsProps {
   apiKey: string;
+  aiProvider: AiProvider;
+  hostedAiAvailable: boolean;
   personality: CoachPersonality;
-  goals: UserGoals;
   onSaveKey: (key: string) => void;
+  onSaveAiProvider: (provider: AiProvider) => void;
   onSavePersonality: (personality: CoachPersonality) => void;
-  onSaveGoals: (goals: UserGoals) => void;
   onClearData: () => void;
   onImportData: (jsonData: string) => boolean;
   exportDataJson: string;
@@ -19,9 +23,12 @@ interface SettingsProps {
   supplementReminders?: SupplementReminders;
   onSaveSupplementReminders?: (r: SupplementReminders) => void;
   cloudConfigured?: boolean;
-  cloudUser?: { email: string | null } | null;
+  cloudAccount?: CloudAccount | null;
+  cloudSyncStatus?: CloudSyncStatus;
   onCloudSignIn?: (email: string, password: string) => void | Promise<void>;
   onCloudSignUp?: (email: string, password: string) => void | Promise<void>;
+  onCloudSignInGoogle?: () => void | Promise<void>;
+  onCloudPasswordReset?: (email: string) => void | Promise<void>;
   onCloudSignOut?: () => void | Promise<void>;
   onCloudPush?: () => void | Promise<void>;
   onCloudPull?: () => void | Promise<void>;
@@ -29,11 +36,12 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({
   apiKey,
+  aiProvider,
+  hostedAiAvailable,
   personality,
-  goals,
   onSaveKey,
+  onSaveAiProvider,
   onSavePersonality,
-  onSaveGoals,
   onClearData,
   onImportData,
   exportDataJson,
@@ -42,21 +50,16 @@ export const Settings: React.FC<SettingsProps> = ({
   supplementReminders,
   onSaveSupplementReminders,
   cloudConfigured,
-  cloudUser,
+  cloudAccount,
+  cloudSyncStatus,
   onCloudSignIn,
   onCloudSignUp,
+  onCloudSignInGoogle,
+  onCloudPasswordReset,
   onCloudSignOut,
   onCloudPush,
   onCloudPull
 }) => {
-  const [cloudEmail, setCloudEmail] = useState('');
-  const [cloudPassword, setCloudPassword] = useState('');
-  const [cloudBusy, setCloudBusy] = useState(false);
-  const runCloud = async (fn?: () => void | Promise<void>) => {
-    if (!fn) return;
-    setCloudBusy(true);
-    try { await fn(); } finally { setCloudBusy(false); }
-  };
   const rem: MealReminders = reminders || { enabled: false, breakfast: '08:00', lunch: '12:30', dinner: '18:30', snack: '16:00' };
   const [remEnabled, setRemEnabled] = useState(rem.enabled);
   const [remBreakfast, setRemBreakfast] = useState(rem.breakfast);
@@ -83,13 +86,6 @@ export const Settings: React.FC<SettingsProps> = ({
   };
   const [keyInput, setKeyInput] = useState(apiKey);
   const [showKey, setShowKey] = useState(false);
-  const [caloriesInput, setCaloriesInput] = useState(goals.calories);
-  const [proteinInput, setProteinInput] = useState(goals.protein);
-  const [carbsInput, setCarbsInput] = useState(goals.carbs);
-  const [fatInput, setFatInput] = useState(goals.fat);
-  const [addedSugarInput, setAddedSugarInput] = useState(goals.addedSugar || 30);
-  const [fiberInput, setFiberInput] = useState(goals.fiber || 30);
-  const [sodiumInput, setSodiumInput] = useState(goals.sodium || 2300);
 
   const [saveStatus, setSaveStatus] = useState<{ [key: string]: boolean }>({});
 
@@ -103,29 +99,6 @@ export const Settings: React.FC<SettingsProps> = ({
   const handleSaveKey = () => {
     onSaveKey(keyInput);
     triggerSaveStatus('key');
-  };
-
-  const handleSaveGoals = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clamped: UserGoals = {
-      calories: clampGoal('calories', Number(caloriesInput), 2000),
-      protein: clampGoal('protein', Number(proteinInput), 130),
-      carbs: clampGoal('carbs', Number(carbsInput), 220),
-      fat: clampGoal('fat', Number(fatInput), 65),
-      addedSugar: clampGoal('addedSugar', Number(addedSugarInput), 30),
-      fiber: clampGoal('fiber', Number(fiberInput), 30),
-      sodium: clampGoal('sodium', Number(sodiumInput), 2300),
-    };
-    // Reflect any clamping back into the inputs so the user sees the corrected values.
-    setCaloriesInput(clamped.calories);
-    setProteinInput(clamped.protein);
-    setCarbsInput(clamped.carbs);
-    setFatInput(clamped.fat);
-    setAddedSugarInput(clamped.addedSugar!);
-    setFiberInput(clamped.fiber!);
-    setSodiumInput(clamped.sodium!);
-    onSaveGoals(clamped);
-    triggerSaveStatus('goals');
   };
 
   const handleSelectPersonality = (p: CoachPersonality) => {
@@ -177,91 +150,246 @@ export const Settings: React.FC<SettingsProps> = ({
     }
   };
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
-      
-      {/* 1. API Configuration */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <h3 style={{
-          fontSize: '1.15rem',
-          color: 'var(--text-primary)',
-          fontFamily: 'var(--font-display)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          borderBottom: '1px solid rgba(255,255,255,0.03)',
-          paddingBottom: '0.5rem'
-        }}>
-          <Key size={18} color="var(--accent-purple)" />
-          AI Supermode Key Setup
-        </h3>
-        
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-          HelloCal processes standard transcripts offline. However, to unlock the <strong>Multimodal Microphone Recording</strong> (whisper tracking, auto serving-sizes, conversational coaching), you must enter a Gemini API Key. 
-          You can get a free personal API key in seconds from the <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-purple)', textDecoration: 'none', fontWeight: 650 }}>Google AI Studio Portal</a>.
-        </p>
+  const handleSelectAiProvider = (provider: AiProvider) => {
+    onSaveAiProvider(provider);
+    triggerSaveStatus('aiProvider');
+  };
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <input 
-                type={showKey ? 'text' : 'password'}
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                placeholder="Paste your Gemini API key (AIzaSy...)"
-                style={{
-                  width: '100%',
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '12px',
-                  padding: '0.75rem 2.5rem 0.75rem 1rem',
-                  color: 'var(--text-primary)',
-                  outline: 'none',
-                  fontFamily: 'monospace',
-                  fontSize: '0.9rem'
-                }}
-              />
-              <button 
-                onClick={() => setShowKey(!showKey)}
-                style={{
-                  position: 'absolute',
-                  right: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <button onClick={handleSaveKey} className="btn btn-primary" style={{ padding: '0.75rem 1.25rem' }}>
-              {saveStatus['key'] ? 'Saved!' : 'Save Key'}
-            </button>
+  const remindersAnyOn = remEnabled || suppRemEnabled;
+
+  return (
+    <div className="settings-page">
+
+      {/* Reminders — featured at top for discoverability */}
+      <div className="glass-card settings-section settings-reminders-section motion-stagger" style={{ '--i': 0 } as React.CSSProperties}>
+        <div className={`settings-reminders-spotlight${remindersAnyOn ? ' is-active' : ''}`}>
+          <div className="settings-reminders-spotlight__icon" aria-hidden="true">
+            <Bell size={22} />
           </div>
-          
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            🔑 Don't have a key? Find and generate your free Gemini API key in 10 seconds at: 
-            <a 
-              href="https://aistudio.google.com/api-keys" 
-              target="_blank" 
-              rel="noreferrer" 
-              style={{ 
-                color: 'var(--accent-purple)', 
-                textDecoration: 'underline', 
-                fontWeight: 650 
-              }}
-            >
-              Google AI Studio Keys ↗
-            </a>
-          </span>
+          <div className="settings-reminders-spotlight__copy">
+            <p className="settings-reminders-spotlight__eyebrow">Built-in feature</p>
+            <h2 className="settings-reminders-spotlight__title">Daily reminders</h2>
+            <p className="settings-reminders-spotlight__lead">
+              Schedule gentle nudges to log meals and take supplements — so tracking stays effortless even on busy days.
+              {!isNative() && ' On the web, reminders work while HelloCal is open; install the app for background alerts.'}
+            </p>
+            <div className="settings-reminders-spotlight__status" aria-label="Reminder status">
+              <span className={`settings-reminders-pill${remEnabled ? ' is-on' : ''}`}>
+                <span aria-hidden>🍽</span> Meals {remEnabled ? 'on' : 'off'}
+              </span>
+              <span className={`settings-reminders-pill${suppRemEnabled ? ' is-on' : ''}`}>
+                <Pill size={13} aria-hidden /> Supplements {suppRemEnabled ? 'on' : 'off'}
+              </span>
+            </div>
+            {!remindersAnyOn ? (
+              <p className="settings-reminders-spotlight__cta">Enable either option below to get started.</p>
+            ) : null}
+          </div>
+        </div>
+
+        <h3 className="settings-section-title">
+          <Bell size={18} color="var(--accent-purple)" />
+          Configure reminders
+        </h3>
+
+        {/* Meal Reminders Form */}
+        <div className="settings-reminders-block">
+          <form onSubmit={handleSaveReminders} className="settings-reminders-form">
+            <label className="settings-reminders-toggle">
+              <input
+                type="checkbox"
+                checked={remEnabled}
+                onChange={(e) => setRemEnabled(e.target.checked)}
+              />
+              Enable meal reminders
+            </label>
+
+            <div className={`settings-reminders-times${remEnabled ? '' : ' is-disabled'}`}>
+              {([
+                ['Breakfast', remBreakfast, setRemBreakfast],
+                ['Lunch', remLunch, setRemLunch],
+                ['Snack', remSnack, setRemSnack],
+                ['Dinner', remDinner, setRemDinner],
+              ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
+                <div key={label} className="settings-reminders-time-field">
+                  <label>{label}</label>
+                  <input
+                    type="time"
+                    value={value}
+                    disabled={!remEnabled}
+                    onChange={(e) => setter(e.target.value)}
+                    aria-label={`${label} reminder time`}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button type="submit" className="btn btn-primary settings-reminders-save">
+              {saveStatus['reminders'] ? 'Meal Reminders Saved!' : 'Save Meal Reminders'}
+            </button>
+          </form>
+        </div>
+
+        {/* Supplement Reminders Form */}
+        <div className="settings-reminders-block">
+          <form onSubmit={handleSaveSupplementReminders} className="settings-reminders-form">
+            <label className="settings-reminders-toggle">
+              <input
+                type="checkbox"
+                checked={suppRemEnabled}
+                onChange={(e) => setSuppRemEnabled(e.target.checked)}
+              />
+              <Pill size={16} color={suppRemEnabled ? 'var(--accent-purple)' : 'var(--text-muted)'} aria-hidden />
+              Enable supplement reminders
+            </label>
+
+            <div className={`settings-reminders-times${suppRemEnabled ? '' : ' is-disabled'}`}>
+              {([
+                ['Morning', suppRemMorning, setSuppRemMorning],
+                ['Lunch', suppRemLunch, setSuppRemLunch],
+                ['Bedtime', suppRemBedtime, setSuppRemBedtime],
+              ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
+                <div key={label} className="settings-reminders-time-field">
+                  <label>{label}</label>
+                  <input
+                    type="time"
+                    value={value}
+                    disabled={!suppRemEnabled}
+                    onChange={(e) => setter(e.target.value)}
+                    aria-label={`${label} supplement reminder time`}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button type="submit" className="btn btn-primary settings-reminders-save">
+              {saveStatus['supplementReminders'] ? 'Supplement Reminders Saved!' : 'Save Supplement Reminders'}
+            </button>
+          </form>
         </div>
       </div>
 
-      {/* 2. Personalities Selector */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Account & cloud backup */}
+      <div className="glass-card settings-section motion-stagger" style={{ '--i': 1 } as React.CSSProperties}>
+        <h3 className="settings-section-title">
+          <Cloud size={18} color="var(--accent-blue)" />
+          Account &amp; cloud sync
+        </h3>
+        <p className="settings-section-lead">
+          Sign in to back up your logs, goals, and settings across devices. HelloCal AI (voice, photo, and smart parsing) also runs through your account when you choose HelloCal AI below.
+        </p>
+
+        <AccountSection
+          configured={!!cloudConfigured}
+          account={cloudAccount ?? null}
+          syncStatus={cloudSyncStatus ?? { lastAt: null, syncing: false, error: null }}
+          onSignInGoogle={() => onCloudSignInGoogle?.()}
+          onSignInEmail={(email, password) => onCloudSignIn?.(email, password)}
+          onSignUp={(email, password) => onCloudSignUp?.(email, password)}
+          onPasswordReset={(email) => onCloudPasswordReset?.(email)}
+          onSignOut={() => onCloudSignOut?.()}
+          onPush={() => onCloudPush?.()}
+          onPull={() => onCloudPull?.()}
+        />
+      </div>
+
+      {/* AI provider */}
+      <div className="glass-card settings-section motion-stagger" style={{ '--i': 2 } as React.CSSProperties}>
+        <h3 className="settings-section-title">
+          <Sparkles size={18} color="var(--accent-purple)" />
+          AI provider
+        </h3>
+        <p className="settings-section-lead">
+          Choose how voice, photo, and smart parsing run. HelloCal AI uses our secure backend — no API key needed when signed in.
+        </p>
+
+        <div className="settings-ai-provider-grid">
+          <button
+            type="button"
+            className={`settings-personality-card${aiProvider === 'hosted' ? ' is-active' : ''}`}
+            disabled={!hostedAiAvailable}
+            onClick={() => handleSelectAiProvider('hosted')}
+          >
+            <span className="settings-personality-card__label">HelloCal AI</span>
+            <span className="settings-personality-card__desc">
+              {hostedAiAvailable
+                ? 'Powered by our backend. Sign in above — no personal Gemini key required.'
+                : 'Requires cloud configuration on this build.'}
+            </span>
+            {saveStatus['aiProvider'] && aiProvider === 'hosted' ? (
+              <span style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', fontWeight: 600 }}>Selected</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={`settings-personality-card${aiProvider === 'custom' ? ' is-active' : ''}`}
+            onClick={() => handleSelectAiProvider('custom')}
+          >
+            <span className="settings-personality-card__label">Your Gemini key</span>
+            <span className="settings-personality-card__desc">
+              Bring your own free key from Google AI Studio. Works offline-first; cloud sign-in optional.
+            </span>
+            {saveStatus['aiProvider'] && aiProvider === 'custom' ? (
+              <span style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', fontWeight: 600 }}>Selected</span>
+            ) : null}
+          </button>
+        </div>
+
+        {aiProvider === 'custom' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder="Paste your Gemini API key (AIzaSy...)"
+                  className="input-field"
+                  style={{ fontFamily: 'monospace', fontSize: '0.9rem', paddingRight: '2.5rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  style={{
+                    position: 'absolute',
+                    right: '0.75rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer'
+                  }}
+                  aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                >
+                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <button type="button" onClick={handleSaveKey} className="btn btn-primary" style={{ padding: '0.75rem 1.25rem' }}>
+                {saveStatus['key'] ? 'Saved!' : 'Save key'}
+              </button>
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Get a free key at{' '}
+              <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-purple)', fontWeight: 650 }}>
+                Google AI Studio ↗
+              </a>
+            </span>
+          </div>
+        ) : cloudAccount ? (
+          <p className="settings-section-lead" style={{ margin: 0, color: 'var(--accent-teal)' }}>
+            <Key size={14} style={{ display: 'inline', verticalAlign: '-2px', marginRight: '0.25rem' }} />
+            HelloCal AI is active for {cloudAccount.email ?? 'your account'}.
+          </p>
+        ) : (
+          <p className="settings-section-lead" style={{ margin: 0 }}>
+            Sign in with Google or email above to enable HelloCal AI.
+          </p>
+        )}
+      </div>
+
+      {/* Personalities Selector */}
+      <div className="glass-card motion-stagger" style={{ '--i': 3, display: 'flex', flexDirection: 'column', gap: '1.25rem' } as React.CSSProperties}>
         <h3 style={{
           fontSize: '1.15rem',
           color: 'var(--text-primary)',
@@ -289,42 +417,14 @@ export const Settings: React.FC<SettingsProps> = ({
           ] as const).map(p => (
             <button
               key={p.id}
+              type="button"
+              className={`settings-personality-card${personality === p.id ? ' is-active' : ''}`}
               onClick={() => handleSelectPersonality(p.id)}
-              style={{
-                background: personality === p.id ? 'rgba(139, 92, 246, 0.08)' : 'rgba(255,255,255,0.01)',
-                border: personality === p.id ? '1px solid var(--accent-purple)' : '1px solid var(--border-glass)',
-                borderRadius: '16px',
-                padding: '1.25rem 1rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem',
-                boxShadow: personality === p.id ? '0 0 15px rgba(139, 92, 246, 0.1)' : 'none',
-                transition: 'var(--transition-smooth)'
-              }}
-              onMouseEnter={(e) => {
-                if (personality !== p.id) {
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (personality !== p.id) {
-                  e.currentTarget.style.borderColor = 'var(--border-glass)';
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)';
-                }
-              }}
             >
-              <span style={{ 
-                fontSize: '0.95rem', 
-                fontWeight: 700, 
-                fontFamily: 'var(--font-display)',
-                color: personality === p.id ? 'var(--accent-purple)' : 'var(--text-primary)'
-              }}>
+              <span className="settings-personality-card__label">
                 {p.label}
               </span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
+              <span className="settings-personality-card__desc">
                 {p.desc}
               </span>
             </button>
@@ -332,274 +432,8 @@ export const Settings: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      {/* 3. Goal Managers */}
-      <div className="glass-card">
-        <h3 style={{
-          fontSize: '1.15rem',
-          color: 'var(--text-primary)',
-          fontFamily: 'var(--font-display)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          borderBottom: '1px solid rgba(255,255,255,0.03)',
-          paddingBottom: '0.5rem',
-          marginBottom: '1.25rem'
-        }}>
-          <Goal size={18} color="var(--accent-amber)" />
-          Configure Daily Targets
-        </h3>
-
-        <form onSubmit={handleSaveGoals} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
-            {/* Calories Limit */}
-            <div className="input-group">
-              <label className="input-label">Calories Budget (kcal)</label>
-              <input 
-                type="number" 
-                value={caloriesInput} 
-                onChange={(e) => setCaloriesInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-            
-            {/* Protein Goal */}
-            <div className="input-group">
-              <label className="input-label">Protein Goal (g)</label>
-              <input 
-                type="number" 
-                value={proteinInput} 
-                onChange={(e) => setProteinInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-            
-            {/* Carbs Goal */}
-            <div className="input-group">
-              <label className="input-label">Carbs Goal (g)</label>
-              <input 
-                type="number" 
-                value={carbsInput} 
-                onChange={(e) => setCarbsInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-            
-            {/* Fat Goal */}
-            <div className="input-group">
-              <label className="input-label">Fats Goal (g)</label>
-              <input 
-                type="number" 
-                value={fatInput} 
-                onChange={(e) => setFatInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-          </div>
-
-          <div style={{
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-display)',
-            borderTop: '1px dashed rgba(255,255,255,0.06)',
-            paddingTop: '0.75rem',
-            marginTop: '0.25rem'
-          }}>
-            🎯 Daily Micronutrient Budgets
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
-            {/* Added Sugar Limit */}
-            <div className="input-group">
-              <label className="input-label">Added Sugar Limit (g)</label>
-              <input 
-                type="number" 
-                value={addedSugarInput} 
-                onChange={(e) => setAddedSugarInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-
-            {/* Dietary Fiber Target */}
-            <div className="input-group">
-              <label className="input-label">Dietary Fiber Target (g)</label>
-              <input 
-                type="number" 
-                value={fiberInput} 
-                onChange={(e) => setFiberInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-
-            {/* Sodium Limit */}
-            <div className="input-group">
-              <label className="input-label">Sodium Limit (mg)</label>
-              <input 
-                type="number" 
-                value={sodiumInput} 
-                onChange={(e) => setSodiumInput(parseInt(e.target.value) || 0)}
-                className="input-field"
-              />
-            </div>
-          </div>
-
-          <button 
-            type="submit" 
-            className="btn btn-primary" 
-            style={{ 
-              alignSelf: 'flex-start',
-              padding: '0.75rem 1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            {saveStatus['goals'] ? 'Goals Locked!' : 'Lock Target Budgets'}
-          </button>
-        </form>
-      </div>
-
-      {/* 3.4 Cloud Sync (Supabase, optional) */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Cloud size={18} color="var(--accent-blue)" /> Cloud Sync
-        </h3>
-
-        {!cloudConfigured ? (
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            Cloud sync is optional and off on this build — your data stays private on this device.
-            To enable cross-device backup, set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> (see SUPABASE.md).
-            You can still use Export / Restore Backup below to move data between devices.
-          </p>
-        ) : cloudUser ? (
-          <>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-              Signed in as <strong style={{ color: 'var(--text-primary)' }}>{cloudUser.email ?? 'your account'}</strong>.
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
-              <button type="button" disabled={cloudBusy} onClick={() => runCloud(onCloudPush)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
-                <CloudUpload size={16} /> Back up to cloud
-              </button>
-              <button type="button" disabled={cloudBusy} onClick={() => runCloud(onCloudPull)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
-                <CloudDownload size={16} /> Restore from cloud
-              </button>
-              <button type="button" disabled={cloudBusy} onClick={() => runCloud(onCloudSignOut)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
-                <LogOut size={16} /> Sign out
-              </button>
-            </div>
-          </>
-        ) : (
-          <form
-            onSubmit={(e) => { e.preventDefault(); runCloud(() => onCloudSignIn?.(cloudEmail, cloudPassword)); }}
-            style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
-          >
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-              Sign in to back up and sync your data across devices.
-            </p>
-            <input type="email" autoComplete="email" required value={cloudEmail} onChange={(e) => setCloudEmail(e.target.value)} placeholder="you@email.com" aria-label="Email"
-              style={{ padding: '0.6rem 0.8rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' }} />
-            <input type="password" autoComplete="current-password" required minLength={6} value={cloudPassword} onChange={(e) => setCloudPassword(e.target.value)} placeholder="Password (6+ characters)" aria-label="Password"
-              style={{ padding: '0.6rem 0.8rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' }} />
-            <div style={{ display: 'flex', gap: '0.6rem' }}>
-              <button type="submit" disabled={cloudBusy} className="btn btn-primary" style={{ padding: '0.6rem 1.1rem', fontSize: '0.85rem' }}>Sign in</button>
-              <button type="button" disabled={cloudBusy} onClick={() => runCloud(() => onCloudSignUp?.(cloudEmail, cloudPassword))} className="btn btn-secondary" style={{ padding: '0.6rem 1.1rem', fontSize: '0.85rem' }}>Create account</button>
-            </div>
-          </form>
-        )}
-      </div>
-
-      {/* 3.5 Notifications & Reminders */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Bell size={18} color="var(--accent-purple)" /> Notifications & Reminders
-        </h3>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-          Gentle daily nudges to log your meals and take your supplements.{!isNative() && ' On the web, reminders fire only while HelloCal is open in a tab — install the app for true background reminders.'}
-        </p>
-
-        {/* Meal Reminders Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <form onSubmit={handleSaveReminders} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-              <input
-                type="checkbox"
-                checked={remEnabled}
-                onChange={(e) => setRemEnabled(e.target.checked)}
-                style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
-              />
-              Enable meal reminders
-            </label>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.85rem', opacity: remEnabled ? 1 : 0.5 }}>
-              {([
-                ['Breakfast', remBreakfast, setRemBreakfast],
-                ['Lunch', remLunch, setRemLunch],
-                ['Snack', remSnack, setRemSnack],
-                ['Dinner', remDinner, setRemDinner],
-              ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
-                <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{label}</label>
-                  <input
-                    type="time"
-                    value={value}
-                    disabled={!remEnabled}
-                    onChange={(e) => setter(e.target.value)}
-                    aria-label={`${label} reminder time`}
-                    style={{ padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}>
-              {saveStatus['reminders'] ? 'Meal Reminders Saved!' : 'Save Meal Reminders'}
-            </button>
-          </form>
-        </div>
-
-        {/* Supplement Reminders Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <form onSubmit={handleSaveSupplementReminders} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-              <input
-                type="checkbox"
-                checked={suppRemEnabled}
-                onChange={(e) => setSuppRemEnabled(e.target.checked)}
-                style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
-              />
-              <Pill size={16} color={suppRemEnabled ? 'var(--accent-purple)' : 'var(--text-muted)'} />
-              Enable supplement reminders
-            </label>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.85rem', opacity: suppRemEnabled ? 1 : 0.5 }}>
-              {([
-                ['Morning', suppRemMorning, setSuppRemMorning],
-                ['Lunch', suppRemLunch, setSuppRemLunch],
-                ['Bedtime', suppRemBedtime, setSuppRemBedtime],
-              ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
-                <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{label}</label>
-                  <input
-                    type="time"
-                    value={value}
-                    disabled={!suppRemEnabled}
-                    onChange={(e) => setter(e.target.value)}
-                    aria-label={`${label} supplement reminder time`}
-                    style={{ padding: '0.6rem', border: '1px solid var(--border-glass)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}>
-              {saveStatus['supplementReminders'] ? 'Supplement Reminders Saved!' : 'Save Supplement Reminders'}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* 4. Data Center */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Data Center */}
+      <div className="glass-card motion-stagger" style={{ '--i': 4, display: 'flex', flexDirection: 'column', gap: '1.25rem' } as React.CSSProperties}>
         <h3 style={{
           fontSize: '1.15rem',
           color: 'var(--text-primary)',
@@ -615,7 +449,7 @@ export const Settings: React.FC<SettingsProps> = ({
         </h3>
 
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          All food timelines, targets, and API credentials are kept strictly in this web browser's local sandbox memory (`localStorage`). None of this data is sent to external clouds or servers. You can backup your logs locally, or reset the app here.
+          Your data lives on this device first. Export a JSON backup anytime, or sign in above to sync automatically with your account.
         </p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -651,6 +485,11 @@ export const Settings: React.FC<SettingsProps> = ({
             Wipe Local Data
           </button>
         </div>
+      </div>
+
+      {/* Version Display */}
+      <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', paddingTop: '0.5rem' }}>
+        HelloCal v{APP_VERSION} (Commit: {COMMIT_HASH})
       </div>
 
     </div>

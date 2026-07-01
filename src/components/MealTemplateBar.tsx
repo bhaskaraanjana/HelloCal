@@ -19,7 +19,7 @@ export const MealTemplateBar: React.FC<MealTemplateBarProps> = ({ templates, onA
   const ordered = [...templates].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <div className="motion-enter" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '0.15rem' }}>
         <BookmarkCheck size={15} color="var(--accent-teal)" style={{ filter: 'drop-shadow(0 0 4px var(--accent-teal-glow))' }} />
         <span style={{
@@ -44,18 +44,21 @@ export const MealTemplateBar: React.FC<MealTemplateBarProps> = ({ templates, onA
         msOverflowStyle: 'none',
         WebkitOverflowScrolling: 'touch',
       }}>
-        {ordered.map((t) => {
+        {ordered.map((t, index) => {
           const isHovered = hoveredId === t.id;
           return (
             <div
               key={t.id}
+              className="motion-stagger"
+              style={{ '--i': index, flexShrink: 0 } as React.CSSProperties}
               onMouseEnter={() => setHoveredId(t.id)}
               onMouseLeave={() => setHoveredId(null)}
+            >
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                flexShrink: 0,
                 background: isHovered ? 'var(--bg-glass-hover)' : 'var(--bg-glass)',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
@@ -121,6 +124,7 @@ export const MealTemplateBar: React.FC<MealTemplateBarProps> = ({ templates, onA
               >
                 <X size={13} />
               </button>
+            </div>
             </div>
           );
         })}

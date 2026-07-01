@@ -1,5 +1,6 @@
 import type { MealLog, WorkoutLog } from '../types/nutrition';
 import { dayRange } from './insights';
+import { readFoodItemNutrient } from './nutrientValue';
 
 export interface DailyTotals {
   todayLogs: MealLog[];
@@ -92,16 +93,16 @@ export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: 
  */
 export function sumFieldKey(logs: MealLog[], fieldKey: string, ts: number = Date.now()): number {
   const { start, end } = dayRange(ts);
+  return sumFieldKeyBetween(logs, fieldKey, start, end);
+}
+
+/** Sum a FoodItem field across all logs in [start, end). */
+export function sumFieldKeyBetween(logs: MealLog[], fieldKey: string, start: number, end: number): number {
   let total = 0;
   for (const log of logs) {
     if (log.timestamp < start || log.timestamp >= end) continue;
     for (const item of log.items) {
-      const rawItem = item as unknown as Record<string, any>;
-      if (rawItem[fieldKey] !== undefined) {
-        total += n(rawItem[fieldKey]);
-      } else if (rawItem.micros && rawItem.micros[fieldKey] !== undefined) {
-        total += n(rawItem.micros[fieldKey]);
-      }
+      total += readFoodItemNutrient(item, fieldKey);
     }
   }
   return total;

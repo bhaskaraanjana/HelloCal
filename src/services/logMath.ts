@@ -37,6 +37,20 @@ export function scaleNutrients<T extends object>(item: T, factor: number): T {
   return out as unknown as T;
 }
 
+/** Timestamp for logging to a calendar day: now if today, else same clock time on that day. */
+export function logTimestampForDate(day: Date, now: Date = new Date()): number {
+  const target = new Date(day);
+  if (
+    target.getFullYear() === now.getFullYear() &&
+    target.getMonth() === now.getMonth() &&
+    target.getDate() === now.getDate()
+  ) {
+    return now.getTime();
+  }
+  target.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  return target.getTime();
+}
+
 /** The meal slot HelloCal auto-assigns from a local time (defaults to now). */
 export function autoMealSlot(now: Date = new Date()): MealLog['mealType'] {
   const hour = now.getHours();

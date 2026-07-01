@@ -1,3 +1,8 @@
+import {
+  absorbExtraNutrients,
+  finalizeFoodNutrients,
+  roundNutrientValue,
+} from './nutrientValue';
 import type {
   CoachResponse,
   CommandResponse,
@@ -112,11 +117,7 @@ export function coerceFoodItem(raw: any, opts?: { applyDriftGate?: boolean }): O
   const fat = Math.round(num(raw.fat) * 10) / 10;
 
   // addedSugar can never exceed total sugar (manufacturer-added ⊆ total).
-  let sugar = raw.sugar != null ? Math.round(num(raw.sugar) * 10) / 10 : undefined;
-  let addedSugar = raw.addedSugar != null ? Math.round(num(raw.addedSugar) * 10) / 10 : undefined;
-  if (sugar != null && addedSugar != null && addedSugar > sugar) {
-    addedSugar = sugar;
-  }
+  // Final values are resolved below via pick() + promotion from micros/aliases.
 
   // Macro/calorie sanity gate: protein*4 + carbs*4 + fat*9 should roughly match
   // the stated calories. A large mismatch means the AI hallucinated one of the
@@ -138,24 +139,23 @@ export function coerceFoodItem(raw: any, opts?: { applyDriftGate?: boolean }): O
     'calcium', 'potassium', 'cholesterol', 'saturatedFat', 'transFat', 'vitaminA', 'vitaminC', 'vitaminD', 'vitaminB12',
     'zinc', 'magnesium', 'folate', 'confidence', 'id', 'micros'
   ];
-  const micros: Record<string, number> = {};
-  if (raw && typeof raw === 'object') {
-    for (const key of Object.keys(raw)) {
-      if (!knownKeys.includes(key) && (typeof raw[key] === 'number' || (typeof raw[key] === 'string' && raw[key] !== '' && !isNaN(Number(raw[key]))))) {
-        micros[key.toLowerCase()] = Math.round(num(raw[key]) * 100) / 100;
-      }
-    }
-    if (raw.micros && typeof raw.micros === 'object') {
-      for (const key of Object.keys(raw.micros)) {
-        const val = raw.micros[key];
-        if (typeof val === 'number' || (typeof val === 'string' && val !== '' && !isNaN(Number(val)))) {
-          micros[key.toLowerCase()] = Math.round(num(val) * 100) / 100;
-        }
-      }
-    }
-  }
 
-  return {
+  const isNumericLike = (val: unknown): val is number | string =>
+    typeof val === 'number' ? Number.isFinite(val) : typeof val === 'string' && val !== '' && !Number.isNaN(Number(val));
+
+  const pick = (field: keyof FoodItem, rawVal: unknown, promoted: Partial<FoodItem>): number | undefined => {
+    if (rawVal != null && isNumericLike(rawVal)) return roundNutrientValue(field as string, num(rawVal));
+    const fromPromoted = (promoted as Record<string, number | undefined>)[field as string];
+    return fromPromoted !== undefined ? fromPromoted : undefined;
+  };
+
+  const { promoted, micros: absorbedMicros } = absorbExtraNutrients(raw, knownKeys);
+
+  const sugar = pick('sugar', raw.sugar, promoted);
+  let addedSugar = pick('addedSugar', raw.addedSugar, promoted);
+  if (sugar != null && addedSugar != null && addedSugar > sugar) addedSugar = sugar;
+
+  return finalizeFoodNutrients({
     name,
     quantity: typeof raw.quantity === 'string' && raw.quantity.trim() ? raw.quantity.trim() : '1 serving',
     calories,
@@ -164,24 +164,24 @@ export function coerceFoodItem(raw: any, opts?: { applyDriftGate?: boolean }): O
     fat,
     sugar,
     addedSugar,
-    fiber: raw.fiber != null ? Math.round(num(raw.fiber) * 10) / 10 : undefined,
-    sodium: raw.sodium != null ? Math.round(num(raw.sodium)) : undefined,
-    iron: raw.iron != null ? Math.round(num(raw.iron) * 10) / 10 : undefined,
-    calcium: raw.calcium != null ? Math.round(num(raw.calcium)) : undefined,
-    potassium: raw.potassium != null ? Math.round(num(raw.potassium)) : undefined,
-    cholesterol: raw.cholesterol != null ? Math.round(num(raw.cholesterol)) : undefined,
-    saturatedFat: raw.saturatedFat != null ? Math.round(num(raw.saturatedFat) * 10) / 10 : undefined,
-    transFat: raw.transFat != null ? Math.round(num(raw.transFat) * 10) / 10 : undefined,
-    vitaminA: raw.vitaminA != null ? Math.round(num(raw.vitaminA) * 10) / 10 : undefined,
-    vitaminC: raw.vitaminC != null ? Math.round(num(raw.vitaminC) * 10) / 10 : undefined,
-    vitaminD: raw.vitaminD != null ? Math.round(num(raw.vitaminD) * 10) / 10 : undefined,
-    vitaminB12: raw.vitaminB12 != null ? Math.round(num(raw.vitaminB12) * 10) / 10 : undefined,
-    zinc: raw.zinc != null ? Math.round(num(raw.zinc) * 10) / 10 : undefined,
-    magnesium: raw.magnesium != null ? Math.round(num(raw.magnesium)) : undefined,
-    folate: raw.folate != null ? Math.round(num(raw.folate) * 10) / 10 : undefined,
-    micros: Object.keys(micros).length > 0 ? micros : undefined,
+    fiber: pick('fiber', raw.fiber, promoted),
+    sodium: pick('sodium', raw.sodium, promoted),
+    iron: pick('iron', raw.iron, promoted),
+    calcium: pick('calcium', raw.calcium, promoted),
+    potassium: pick('potassium', raw.potassium, promoted),
+    cholesterol: pick('cholesterol', raw.cholesterol, promoted),
+    saturatedFat: pick('saturatedFat', raw.saturatedFat, promoted),
+    transFat: pick('transFat', raw.transFat, promoted),
+    vitaminA: pick('vitaminA', raw.vitaminA, promoted),
+    vitaminC: pick('vitaminC', raw.vitaminC, promoted),
+    vitaminD: pick('vitaminD', raw.vitaminD, promoted),
+    vitaminB12: pick('vitaminB12', raw.vitaminB12, promoted),
+    zinc: pick('zinc', raw.zinc, promoted),
+    magnesium: pick('magnesium', raw.magnesium, promoted),
+    folate: pick('folate', raw.folate, promoted),
+    micros: Object.keys(absorbedMicros).length > 0 ? absorbedMicros : undefined,
     confidence,
-  };
+  });
 }
 
 function coerceWorkout(raw: any): Omit<WorkoutLog, 'id' | 'timestamp'> | null {
@@ -250,6 +250,8 @@ export const GOAL_BOUNDS: Record<keyof UserGoals, { min: number; max: number }> 
   protein: { min: 10, max: 500 },
   carbs: { min: 0, max: 800 },
   fat: { min: 0, max: 400 },
+  saturatedFat: { min: 0, max: 100 },
+  transFat: { min: 0, max: 50 },
   addedSugar: { min: 0, max: 200 },
   fiber: { min: 5, max: 150 },
   sodium: { min: 200, max: 6000 },

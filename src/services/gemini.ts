@@ -1,9 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse, UserGoals, AppSettings, CommandResponse, Recipe } from '../types/nutrition';
+import type { FoodItem, WorkoutLog, CoachPersonality, CoachResponse, Recipe } from '../types/nutrition';
+import type { AiCredentials } from './aiRuntime';
+import { assertAiReady, toAiCredentials, type AiAccess } from './aiRuntime';
+import { runHostedModel } from './geminiProxy';
 import {
   extractJSON,
   validateCoachResponse,
-  validateCommandResponse,
   sanitizePersonality,
   withRetry,
 } from './validation';
@@ -29,28 +31,22 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 };
 
 const SYSTEM_PROMPT = `
-You are HelloCal, an advanced AI nutritionist and fitness coach. Your task is to analyze natural language logs (from text, voice, or food photo scans) and extract structured nutritional or workout data.
+You are HelloCal, an advanced AI nutritionist. Your task is to analyze natural language logs (from text, voice, or food photo scans) and extract structured nutritional data for food the user ate.
 
-You must handle three types of entries, which you will classify via the "type" field:
-1. "food": If the user is logging things they ate.
-2. "workout": If the user is logging physical exercises or activities.
-3. "mixed": If the user is logging both meals and physical exercises in a single input.
+This app logs food calories only. If the user mentions exercise or workouts, ignore that and extract only food items if any are present. Always set "type" to "food" and never include a "workout" field.
 
 For Food Logging:
 You must estimate calories and macronutrients (protein, carbs, and fat in grams), as well as micronutrients: total sugar, added sugar, and fiber in grams; sodium, iron, calcium, potassium, cholesterol, vitamin C, zinc, and magnesium in milligrams; vitamin A, vitamin D, vitamin B12, and folate in micrograms.
-In addition, you should estimate any other notable micronutrients, vitamins, or minerals present in the food (like copper, selenium, iodine, vitamin K, biotin, choline, manganese, etc.) and list them inside a nested 'micros' object. Map the lowercase alnum name (e.g. "copper", "selenium", "vitamink") to its numeric value in standard units (mcg for iodine/selenium/vitaminK/biotin/chromium, mg for copper/manganese/pantothenicacid/niacin/riboflavin/thiamin).
+In addition, you should estimate any other notable micronutrients, vitamins, or minerals present in the food (like copper, selenium, iodine, vitamin K, biotin, choline, manganese, etc.) and list them inside a nested 'micros' object. Map the lowercase alnum name (e.g. "copper", "selenium", "vitamink") to its numeric value in standard units (mcg for iodine/selenium/vitaminK/biotin/chromium, mg for copper/manganese/pantothenicacid/niacin/riboflavin/thiamin). For fish, seafood, walnuts, flax, chia, and seed oils estimate "omega3" in grams (total omega-3 fatty acids). For vegetable oils, nuts, and seeds estimate "omega6" in grams (linoleic acid / omega-6).
 If the portion size is ambiguous, make a smart, realistic estimate based on standard USDA serving sizes and note confidence as "guess" rather than "high".
 If any micronutrient is not present or negligible, set it to 0.
 "sugar" is TOTAL sugar; "addedSugar" is ONLY manufacturer/recipe-added sugar (table sugar, syrups, sweeteners). Naturally occurring sugar in whole fruit, plain milk, or plain yogurt is NOT added sugar — set addedSugar to 0 for those. addedSugar must never exceed total sugar.
 Sanity-check every estimate: calories should roughly equal protein*4 + carbs*4 + fat*9 (within ~20%). Never output negative numbers.
 
-For Workout Logging:
-Identify the activity and duration in minutes. Estimate calories burned in kcal using standard MET (Metabolic Equivalent) values, assuming a 75 kg (165 lb) adult unless the user states otherwise. Use the standard ACSM formula: caloriesBurned = MET * 3.5 * 75 * duration_minutes / 200. Reference METs: walking 3.5, brisk walking 4.3, running (6 mph) 9.8, cycling (moderate) 7.5, swimming 8.0, weightlifting 4.0, yoga 2.5, HIIT 9.0, elliptical 5.0, hiking 6.0. If the user explicitly gives calories burned, use their number.
-
 You must respond with ONLY a JSON object (no markdown, no prose) matching this exact TypeScript structure:
 {
-  "type": "food" | "workout" | "mixed",
-  "items": [ // only include for "food" or "mixed" types
+  "type": "food",
+  "items": [
     {
       "name": "Food Name",
       "quantity": "estimated portion size (e.g. 1 medium, 150g, 2 slices)",
@@ -78,96 +74,35 @@ You must respond with ONLY a JSON object (no markdown, no prose) matching this e
       "micros": {         // object containing any other present micronutrients/vitamins not listed above (lowercase keys)
         "selenium": 12.5, // float in micrograms (mcg)
         "copper": 0.2,    // float in milligrams (mg)
-        "vitamink": 15.0  // float in micrograms (mcg)
+        "vitamink": 15.0, // float in micrograms (mcg)
+        "omega3": 0.8,    // float in grams (total omega-3)
+        "omega6": 2.1     // float in grams (omega-6)
       },
       "confidence": "high" | "guess"
     }
   ],
-  "workout": { // only include for "workout" or "mixed" types
-    "activity": "Activity Name (e.g. Running, Weightlifting, Yoga)",
-    "duration": 45, // integer in minutes
-    "caloriesBurned": 350, // integer in kcal
-    "notes": "Estimated active burn for a 45 min session" // brief exercise summary note
-  },
   "coachingMessage": "Your custom coaching advice here."
 }
 
 Rules for the "coachingMessage":
-Acknowledge the foods and/or exercises logged, comment on protein, fiber, or added sugar, celebrate active workouts, and tailor your tone EXACTLY to the requested personality:
-- "encouraging": Warm, highly supportive, congratulates healthy choices and active workouts, gentle.
-- "strict": No-excuses trainer mode. Pushes for high protein, warns directly about high added sugar, calls out exercise slacking or praises hard burn briefly.
-- "analytical": Scientific, objective, mentions glycemic impact, MET value for exercise, fiber, sodium, or exact metabolic details. No fluff.
-- "chill": Extremely relaxed, casual buddy tone. "Hey, awesome job on that workout, keep doing your thing, looks delicious!"
-`;
-
-const APP_COMMAND_PROMPT = `
-You are the AI Command Center of HelloCal. The user has clicked a dashboard card or triggered the dynamic customize button, requesting a custom UI modification, a theme change, an active widget toggle, or a numeric target goal change (by voice or text).
-Your task is to analyze their request, review their current goals and settings, and determine the exact updates required.
-
-Available Themes:
-- "obsidian" (Default dark, obsidian-black glassmorphic styling)
-- "cyberpunk" (Vibrant neon pink, magenta, and dark purple aura theme)
-- "ocean" (Deep maritime blue, sky blue, and glowing azure theme)
-- "emerald" (Lush forest green, glowing emerald details, and mint accents)
-
-Available Progress Counters within Cards to Show/Hide:
-- macronutrients: "protein", "carbs", "fat" (under visibleMacros)
-- micronutrients: "addedSugar", "fiber", "sodium" (under visibleMicros)
-
-Available Cards (Widgets) to Show/Hide (under visibleWidgets):
-- "calorieHalo" (The daily progress ring card)
-- "macros" (Macronutrient target levels card)
-- "micros" (Micronutrient dashboard target card)
-- "workouts" (Logged exercises list widget)
-- "mealSlots" (🍳 B, 🍱 L, 🥗 D counts summary)
-- "goalCompletion" (Percentage target progress card)
-
-Numeric Targets you can update (inside updatedGoals):
-- calories (kcal), protein (g), carbs (g), fat (g), addedSugar (g), fiber (g), sodium (mg).
-
-You MUST respond with ONLY a JSON object (no markdown, no prose) matching this exact structure:
-{
-  "updatedGoals": {
-    // Include ONLY targets that were modified by this command. E.g. {"protein": 150} if the user said "make protein goal 150g". Do not include unmodified fields.
-  },
-  "updatedSettings": {
-    // Include ONLY settings that were modified by this command.
-    "theme": "obsidian" | "cyberpunk" | "ocean" | "emerald",
-    "visibleMacros": {
-      "protein": true/false,
-      "carbs": true/false,
-      "fat": true/false
-    },
-    "visibleMicros": {
-      "addedSugar": true/false,
-      "fiber": true/false,
-      "sodium": true/false
-    },
-    "visibleWidgets": {
-      "calorieHalo": true/false,
-      "macros": true/false,
-      "micros": true/false,
-      "workouts": true/false,
-      "mealSlots": true/false,
-      "goalCompletion": true/false
-    }
-  },
-  "aiResponse": "A friendly, extremely concise confirmation message detailing exactly what you changed (e.g. 'Got it! I've activated Cyberpunk Neon mode. Enjoy the vibrant pink glows!'). Keep it natural, confident, and tailored."
-}
-
-Interpretations:
-- If they say "hide fats counter", set visibleMacros.fat to false.
-- If they say "add sodium counter to macros", set visibleMicros.sodium to true (since sodium is tracked as a micronutrient) and explain it in the aiResponse.
-- If they say "switch to green layout", set theme to "emerald".
-- If they say "show all cards", set all booleans inside visibleWidgets to true.
-- If they say "hide stats card", set visibleWidgets.mealSlots and/or goalCompletion to false.
+Acknowledge the foods logged, comment on protein, fiber, or added sugar, and tailor your tone EXACTLY to the requested personality:
+- "encouraging": Warm, highly supportive, congratulates healthy choices, gentle.
+- "strict": No-excuses trainer mode. Pushes for high protein, warns directly about high added sugar.
+- "analytical": Scientific, objective, mentions glycemic impact, fiber, sodium, or exact metabolic details. No fluff.
+- "chill": Extremely relaxed, casual buddy tone. "Hey, looks delicious — nice protein on that one!"
 `;
 
 type Part = { text: string } | { inlineData: { data: string; mimeType: string } };
 
 /** Build a model + run generateContent with retry/backoff, returning the raw text response. */
-async function runModel(apiKey: string, parts: Part[]): Promise<string> {
-  const genAI = new GoogleGenerativeAI(apiKey);
+async function runModel(creds: AiCredentials, parts: Part[]): Promise<string> {
+  if (creds.mode === 'hosted') {
+    return withRetry(() => runHostedModel(parts, MODEL_NAME));
+  }
+
+  if (!creds.apiKey) throw new Error('Gemini API key is required.');
+
+  const genAI = new GoogleGenerativeAI(creds.apiKey);
   const model = genAI.getGenerativeModel({
     model: MODEL_NAME,
     generationConfig: { responseMimeType: 'application/json' },
@@ -176,9 +111,6 @@ async function runModel(apiKey: string, parts: Part[]): Promise<string> {
   return withRetry(async () => {
     const result = await model.generateContent(parts as any);
     const resp = result.response;
-    // A safety/recitation block or an empty candidate makes the SDK's text() throw an
-    // opaque, non-retryable error ("Text not available. Response was blocked due to
-    // SAFETY"). Detect it and surface a friendly, actionable message instead.
     const blockReason = resp?.promptFeedback?.blockReason;
     const finishReason = resp?.candidates?.[0]?.finishReason;
     if (blockReason || finishReason === 'SAFETY' || finishReason === 'RECITATION' || finishReason === 'OTHER') {
@@ -187,16 +119,18 @@ async function runModel(apiKey: string, parts: Part[]): Promise<string> {
     try {
       return resp.text();
     } catch {
-      throw new Error("The AI returned an empty response. Please try again.");
+      throw new Error('The AI returned an empty response. Please try again.');
     }
   });
 }
 
-/** A per-call instruction that overrides the prompt's default 75 kg assumption. */
-const weightNote = (weightKg?: number): string =>
-  weightKg && weightKg > 0
-    ? ` The user weighs ${Math.round(weightKg)} kg; use THIS weight for MET-based workout calorie burn (caloriesBurned = MET * 3.5 * ${Math.round(weightKg)} * minutes / 200, the standard ACSM formula) unless they explicitly state calories.`
-    : '';
+/** Resolve credentials from AiAccess (convenience for components). */
+function credsFrom(access: AiAccess): AiCredentials {
+  return toAiCredentials(access);
+}
+
+/** @deprecated weight is unused — app logs food calories only */
+const weightNote = (_weightKg?: number): string => '';
 
 const audioPart = async (blob: Blob): Promise<Part> => ({
   inlineData: { data: await blobToBase64(blob), mimeType: blob.type || 'audio/webm' },
@@ -207,33 +141,33 @@ const imagePart = async (blob: Blob): Promise<Part> => ({
 });
 
 export const gemini = {
-  async parseVoice(blob: Blob, apiKey: string, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
-    if (!apiKey) throw new Error('Gemini API key is required to use Voice Supermode.');
+  async parseVoice(blob: Blob, access: AiAccess, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
+    assertAiReady(access, 'Voice Supermode');
 
-    const promptText = `Analyze the uploaded audio recording. It may contain a food log or workout log or both. Extract metrics accordingly.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
+    const promptText = `Analyze the uploaded audio recording. Extract food the user ate and nutritional metrics.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
-    const text = await runModel(apiKey, [
+    const text = await runModel(credsFrom(access), [
       await audioPart(blob),
       { text: `${SYSTEM_PROMPT}\n\n${promptText}` },
     ]);
     return validateCoachResponse(extractJSON(text));
   },
 
-  async parseText(text: string, apiKey: string, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
-    if (!apiKey) throw new Error('Gemini API key is required to use Smart AI Text parsing.');
+  async parseText(text: string, access: AiAccess, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
+    assertAiReady(access, 'Smart AI Text parsing');
 
-    const promptText = `Analyze the following text input: "${text}". It may contain a food log or workout log or both. Extract metrics accordingly.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
+    const promptText = `Analyze the following text input: "${text}". Extract food the user ate and nutritional metrics.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
-    const response = await runModel(apiKey, [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
+    const response = await runModel(credsFrom(access), [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
     return validateCoachResponse(extractJSON(response));
   },
 
-  async parseImage(blob: Blob, apiKey: string, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
-    if (!apiKey) throw new Error('Gemini API key is required to use Visual Photo Scanning.');
+  async parseImage(blob: Blob, access: AiAccess, personality: CoachPersonality, weightKg?: number): Promise<CoachResponse> {
+    assertAiReady(access, 'Visual Photo Scanning');
 
     const promptText = `Analyze the uploaded image. It contains a meal, ingredients, or a nutrition facts label. Identify what it is, estimate portions, and calculate the nutritional metrics.${weightNote(weightKg)}\nThe requested coaching personality is: "${sanitizePersonality(personality)}".`;
 
-    const text = await runModel(apiKey, [
+    const text = await runModel(credsFrom(access), [
       await imagePart(blob),
       { text: `${SYSTEM_PROMPT}\n\n${promptText}` },
     ]);
@@ -242,23 +176,22 @@ export const gemini = {
 
   async correctVoice(
     currentItems: Omit<FoodItem, 'id'>[],
-    currentWorkout: Omit<WorkoutLog, 'id'> | null,
+    _currentWorkout: Omit<WorkoutLog, 'id'> | null,
     blob: Blob,
-    apiKey: string,
+    access: AiAccess,
     personality: CoachPersonality,
     weightKg?: number
   ): Promise<CoachResponse> {
-    if (!apiKey) throw new Error('Gemini API key is required.');
+    assertAiReady(access);
 
     const promptText = `
-The staged data currently has:
-- Food Items: ${JSON.stringify(currentItems, null, 2)}
-- Workout: ${currentWorkout ? JSON.stringify(currentWorkout, null, 2) : 'None'}
+The staged food items currently are:
+${JSON.stringify(currentItems, null, 2)}
 
-The user spoke this correction, subtraction, or addition in the uploaded audio recording. Analyze it and output the updated full JSON containing type, items, and workout.${weightNote(weightKg)}
+The user spoke this correction, subtraction, or addition in the uploaded audio recording. Analyze it and output the updated full JSON with type "food" and an updated items array.${weightNote(weightKg)}
 Requested personality: "${sanitizePersonality(personality)}".`;
 
-    const text = await runModel(apiKey, [
+    const text = await runModel(credsFrom(access), [
       await audioPart(blob),
       { text: `${SYSTEM_PROMPT}\n\n${promptText}` },
     ]);
@@ -267,55 +200,28 @@ Requested personality: "${sanitizePersonality(personality)}".`;
 
   async correctText(
     currentItems: Omit<FoodItem, 'id'>[],
-    currentWorkout: Omit<WorkoutLog, 'id'> | null,
+    _currentWorkout: Omit<WorkoutLog, 'id'> | null,
     text: string,
-    apiKey: string,
+    access: AiAccess,
     personality: CoachPersonality,
     weightKg?: number
   ): Promise<CoachResponse> {
-    if (!apiKey) throw new Error('Gemini API key is required.');
+    assertAiReady(access);
 
     const promptText = `
-The staged data currently has:
-- Food Items: ${JSON.stringify(currentItems, null, 2)}
-- Workout: ${currentWorkout ? JSON.stringify(currentWorkout, null, 2) : 'None'}
+The staged food items currently are:
+${JSON.stringify(currentItems, null, 2)}
 
-The user wrote this correction: "${text}". Analyze it and output the updated full JSON containing type, items, and workout.${weightNote(weightKg)}
+The user wrote this correction: "${text}". Analyze it and output the updated full JSON with type "food" and an updated items array.${weightNote(weightKg)}
 Requested personality: "${sanitizePersonality(personality)}".`;
 
-    const response = await runModel(apiKey, [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
+    const response = await runModel(credsFrom(access), [{ text: `${SYSTEM_PROMPT}\n\n${promptText}` }]);
     return validateCoachResponse(extractJSON(response));
   },
 
-  async executeAppCommand(
-    text: string,
-    voiceBlob: Blob | null,
-    currentGoals: UserGoals,
-    currentSettings: AppSettings,
-    apiKey: string
-  ): Promise<CommandResponse> {
-    if (!apiKey) throw new Error('Gemini API Key is required to run the AI Dashboard Customizer.');
-
-    const promptText = `
-The current user target goals: ${JSON.stringify(currentGoals, null, 2)}
-The current dashboard visual configurations: ${JSON.stringify(currentSettings, null, 2)}
-
-Interpret the user's design command and output the updated layout details.`;
-
-    const parts: Part[] = [];
-    if (voiceBlob) {
-      parts.push(await audioPart(voiceBlob));
-    }
-    const queryText = text ? `User command text: "${text}"` : `User command voice audio.`;
-    parts.push({ text: `${APP_COMMAND_PROMPT}\n\n${promptText}\n\n${queryText}` });
-
-    const response = await runModel(apiKey, parts);
-    return validateCommandResponse(extractJSON(response));
-  },
-
   /** Parse a free-text recipe description into a structured Recipe (per-ingredient macros). */
-  async parseRecipeDescription(description: string, apiKey: string): Promise<Omit<Recipe, 'id'>> {
-    if (!apiKey) throw new Error('Gemini API key is required to use AI Recipe Parsing.');
+  async parseRecipeDescription(description: string, access: AiAccess): Promise<Omit<Recipe, 'id'>> {
+    assertAiReady(access, 'AI Recipe Parsing');
     const RECIPE_PARSER_PROMPT = `
 You are the HelloCal Recipe Creator Assistant. Analyze a natural-language recipe description (ingredients, weights, volumes, servings) and parse it into a structured Recipe object.
 Estimate calories, protein, carbs, fat, sugar, addedSugar, fiber, sodium for every ingredient if not provided, using standard nutritional databases for cups/tbsp/oz/grams. Be accurate; total macros are the sum of ingredients. Set missing/negligible micros to 0.
@@ -328,7 +234,7 @@ Respond with ONLY a JSON object (no markdown):
     { "name": "Rolled Oats", "quantity": "2 cups", "calories": 300, "protein": 10.0, "carbs": 54.0, "fat": 5.0, "sugar": 1.0, "addedSugar": 0.0, "fiber": 8.0, "sodium": 2 }
   ]
 }`;
-    const text = await runModel(apiKey, [
+    const text = await runModel(credsFrom(access), [
       { text: `${RECIPE_PARSER_PROMPT}\n\nAnalyze the following recipe description and parse it into structured JSON:\n"${description}"` },
     ]);
     // Run the raw AI output through the same recipe sanitizer used on load, so NaN/
@@ -348,9 +254,9 @@ Respond with ONLY a JSON object (no markdown):
   },
 
   /** Look up clinical info for a custom micronutrient (for the dashboard micro tracker). */
-  async fetchMicronutrientInfo(name: string, apiKey: string): Promise<{ name: string; emoji: string; unit: string; dailyLimit: number; isLimit: boolean; color: string; glowColor: string }> {
-    if (!apiKey) throw new Error('Gemini API key is required.');
-    const text = await runModel(apiKey, [{
+  async fetchMicronutrientInfo(name: string, access: AiAccess): Promise<{ name: string; emoji: string; unit: string; dailyLimit: number; isLimit: boolean; color: string; glowColor: string }> {
+    assertAiReady(access);
+    const text = await runModel(credsFrom(access), [{
       text: `You are a clinical nutrition database. For the micronutrient "${name}", return a JSON object with:
 - "name": properly capitalized full name (e.g. "Vitamin D3", "Potassium", "Added Sugar")
 - "emoji": a single relevant emoji
@@ -381,9 +287,9 @@ Respond ONLY with the JSON object, no markdown.` }]);
   },
 
   /** Look up standard dosage/schedule for a supplement by name. */
-  async fetchSupplementInfo(name: string, apiKey: string): Promise<{ name: string; dosage: string; schedule: string }> {
-    if (!apiKey) throw new Error('Gemini API key is required.');
-    const text = await runModel(apiKey, [{
+  async fetchSupplementInfo(name: string, access: AiAccess): Promise<{ name: string; dosage: string; schedule: string }> {
+    assertAiReady(access);
+    const text = await runModel(credsFrom(access), [{
       text: `You are a clinical supplement advisor. For the supplement "${name}", return a JSON object with:
 - "name": properly capitalized full supplement name (e.g. "Vitamin D3", "Omega-3 Fish Oil", "Magnesium Glycinate")
 - "dosage": the standard recommended daily dosage as a string (e.g. "1 capsule (1000 IU)", "2 softgels (1000mg)")
