@@ -82,7 +82,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onResult
               position: 'relative',
               borderRadius: 16,
               overflow: 'hidden',
-              background: '#000',
+              background: 'var(--bg-primary)',
               aspectRatio: '4 / 3',
             }}
           >

@@ -31,9 +31,10 @@ typography:
     fontWeight: 600
     letterSpacing: "-0.02em"
   body:
-    fontFamily: "Inter, sans-serif"
+    fontFamily: "DM Sans, sans-serif"
     fontWeight: 400
 rounded:
+  2xs: "4px"
   xs: "6px"
   sm: "8px"
   sm-md: "10px"
@@ -106,9 +107,9 @@ The color palette is characterized by "Obsidian Abyss & Starlight White with Neo
 ## 3. Typography
 
 **Display Font:** Outfit (sans-serif)
-**Body Font:** Inter (sans-serif)
+**Body Font:** DM Sans (sans-serif)
 
-**Character:** A pairing of a bold, clean geometric display face (Outfit) for high-impact numbers and headings, with a highly legible, neutral grotesque face (Inter) for labels and tracking data.
+**Character:** A pairing of a bold, clean geometric display face (Outfit) for high-impact numbers and headings, with a highly legible, humanist sans-serif (DM Sans) for labels and tracking data.
 
 ### Hierarchy
 - **Display** (600, clamp(1.75rem, 5vw, 3rem), 1.2): Large metric readouts (e.g. calorie totals) and page headers.

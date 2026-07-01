@@ -1,5 +1,15 @@
 # Internal Documentation
 
+## Version 1.0.86
+* **Date**: June 30, 2026
+* **Changes**:
+  * **Fix all 5 detect anti-patterns**:
+    * Replaced overused `Inter` body font with `DM Sans` across `index.css`, `DESIGN.md`.
+    * Replaced undocumented `#000` in `BarcodeScanner.tsx` with `var(--bg-primary)`.
+    * Replaced undocumented `#334155`/`#475569` bottle cap colors in `HydrationTracker.tsx` with `var(--bg-secondary)` / `var(--bg-glass-active)`.
+    * Replaced off-scale `3px` border-radius in `HydrationTracker.tsx` with `var(--radius-xs)`.
+    * Added `--radius-xs: 4px` token to `index.css` and `2xs: 4px` to `DESIGN.md` rounded scale.
+
 ## Version 1.0.85
 * **Date**: June 30, 2026
 * **Changes**:

@@ -154,7 +154,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
         <div style={{
           width: '40px',
           height: '14px',
-          background: 'linear-gradient(90deg, #334155, #475569)',
+          background: 'linear-gradient(90deg, var(--bg-secondary), var(--bg-glass-active))',
           border: '1.5px solid rgba(255, 255, 255, 0.15)',
           borderBottom: 'none',
           borderRadius: '6px 6px 0 0',
@@ -168,7 +168,7 @@ export const HydrationTracker: React.FC<HydrationTrackerProps> = ({
           background: 'rgba(255, 255, 255, 0.05)',
           border: '2px solid rgba(255, 255, 255, 0.08)',
           borderBottom: 'none',
-          borderRadius: '3px 3px 0 0',
+          borderRadius: 'var(--radius-xs) var(--radius-xs) 0 0',
           zIndex: 4
         }} />
         
