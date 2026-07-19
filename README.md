@@ -13,8 +13,8 @@
 
 <br/>
 
-<a href="https://hellocal.infinitemind.space">
-  <img src="https://img.shields.io/badge/▶_Live_Demo-hellocal.infinitemind.space-ec4899?style=for-the-badge" alt="Live Demo"/>
+<a href="https://cal.infinitemind.space">
+  <img src="https://img.shields.io/badge/▶_Live_Demo-cal.infinitemind.space-ec4899?style=for-the-badge" alt="Live Demo"/>
 </a>
 &nbsp;
 <a href="#-quick-start">
@@ -24,7 +24,9 @@
 <br/><br/>
 
 <p align="center">
-  <img src="public/logo.svg" width="96" alt="HelloCal logo"/>
+  <a href="https://cal.infinitemind.space">
+    <img src=".github/assets/dashboard.png" width="900" alt="HelloCal dashboard — voice log, calorie ring, water tracker"/>
+  </a>
 </p>
 
 </div>
@@ -47,21 +49,42 @@
 
 ## ✨ See it in action
 
-**Live app:** [https://hellocal.infinitemind.space](https://hellocal.infinitemind.space)
+**Live app:** [https://cal.infinitemind.space](https://cal.infinitemind.space)
+
+### Desktop
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src=".github/assets/dashboard.png" alt="Dashboard with Log Food, calorie ring, and water tracker" width="100%"/>
+      <br/><em>Dashboard — log by voice, type, photo, or barcode</em>
+    </td>
+    <td width="50%" align="center">
+      <img src=".github/assets/dashboard-panels.png" alt="Macro, micro, and supplement panels" width="100%"/>
+      <br/><em>Panels — macros, micros, and supplements</em>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src=".github/assets/timeline.png" alt="Nutrition calendar and meal timeline" width="100%"/>
+      <br/><em>Timeline — nutrition calendar & meal history</em>
+    </td>
+    <td width="50%" align="center">
+      <img src=".github/assets/analytics.png" alt="Analytics overview with insights and calorie chart" width="100%"/>
+      <br/><em>Analytics — insights, adherence, calories vs goal</em>
+    </td>
+  </tr>
+</table>
+
+### Mobile
 
 <p align="center">
-  <img src="src/assets/hero.png" width="280" alt="HelloCal hero art — obsidian console aesthetic"/>
+  <img src=".github/assets/dashboard-mobile.png" width="280" alt="HelloCal mobile dashboard"/>
+  &nbsp;&nbsp;
+  <img src=".github/assets/analytics-mobile.png" width="280" alt="HelloCal mobile analytics"/>
 </p>
 
-<!-- TODO: Add product screenshots (dashboard, voice log, analytics) under .github/assets/
-     and a short demo GIF/mp4. Upload video via the GitHub README editor for a native player. -->
-
-| | |
-|:--:|:--:|
-| **Voice-first logging** | **Analytics & streaks** |
-| Speak a meal; macros land on the dashboard. | Trends, heatmaps, and goal feedback at a glance. |
-| **Barcode & recipes** | **Hydration & supplements** |
-| Scan packages or save go-to meals. | Track water and daily stack without leaving the app. |
+<p align="center"><em>Phone-ready PWA — same app as desktop, bottom nav for one-handed logging</em></p>
 
 > [!TIP]
 > HelloCal is **offline-first**. Everything works in the browser with no backend. Supabase and Gemini unlock account sync and server-proxied AI when you opt in.
@@ -179,7 +202,7 @@ Native bridges include camera meal capture, haptics, share/export, splash/status
 
 ## 🚀 Deployment
 
-**Live at:** [https://hellocal.infinitemind.space](https://hellocal.infinitemind.space)
+**Live at:** [https://cal.infinitemind.space](https://cal.infinitemind.space)
 
 Configured for **Vercel** SPA hosting (`vercel.json` rewrites all routes to `index.html`).
 
@@ -222,7 +245,7 @@ This repository is private (`"private": true` in `package.json`). Contact the ma
 
 <div align="center">
 
-**[▶ Open HelloCal](https://hellocal.infinitemind.space)** · Built for speed, clarity, and calm daily tracking.
+**[▶ Open HelloCal](https://cal.infinitemind.space)** · Built for speed, clarity, and calm daily tracking.
 
 </div>
 
