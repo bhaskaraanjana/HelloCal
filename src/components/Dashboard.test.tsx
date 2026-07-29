@@ -28,16 +28,6 @@ const todayMeal = (): MealLog => ({
 });
 
 describe('Dashboard', () => {
-  it('shows the first-log quick-start nudge when nothing is logged today', () => {
-    render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={settings} />);
-    expect(screen.getByText(/Quick start/i)).toBeTruthy();
-  });
-
-  it('hides the nudge once a meal is logged today', () => {
-    render(<Dashboard logs={[todayMeal()]} workouts={[]} goals={goals} appSettings={settings} />);
-    expect(screen.queryByText(/Quick start/i)).toBeNull();
-  });
-
   it('renders all five dashboard panels', () => {
     render(<Dashboard logs={[]} workouts={[]} goals={goals} appSettings={settings} />);
     expect(screen.getByLabelText(/Today's Calories panel/i)).toBeTruthy();

@@ -92,7 +92,7 @@ describe('migration backfill', () => {
 
   it('migrate() stamps the schema version', () => {
     storage.migrate();
-    expect(localStorage.getItem('hellocal_schema_version')).toBe('3');
+    expect(localStorage.getItem('hellocal_schema_version')).toBe('4');
   });
 
   it('migrate() carries legacy halocal_* data forward to hellocal_* (rebrand)', () => {
@@ -116,7 +116,7 @@ describe('migration backfill', () => {
     localStorage.setItem('hellocal_schema_version', '2');
     localStorage.setItem('hellocal_app_settings', '{bad json');
     expect(() => storage.migrate()).not.toThrow();
-    expect(localStorage.getItem('hellocal_schema_version')).toBe('3');
+    expect(localStorage.getItem('hellocal_schema_version')).toBe('4');
   });
 });
 
@@ -130,7 +130,7 @@ describe('clearAll wipes data permanently (no resurrection)', () => {
     storage.clearAll();
     expect(localStorage.getItem('halocal_logs')).toBeNull();
     expect(localStorage.getItem('hellocal_logs')).toBeNull();
-    expect(localStorage.getItem('hellocal_schema_version')).toBe('3');
+    expect(localStorage.getItem('hellocal_schema_version')).toBe('4');
 
     // Simulate the next app mount: migrate() must be a no-op, not a resurrection.
     storage.migrate();

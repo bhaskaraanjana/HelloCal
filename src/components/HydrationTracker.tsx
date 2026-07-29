@@ -31,6 +31,7 @@ const HydrationDropVisual: React.FC<{
   const liquidY = DROP_VIEW_H * (1 - fillPercent / 100);
 
   return (
+
     <div className={`hydration-drop${isSplashing ? ' hydration-drop--splash' : ''}`} aria-hidden>
       <div className="hydration-drop__glow" />
       <span className="hydration-drop__orb hydration-drop__orb--1" />
@@ -72,6 +73,7 @@ const HydrationDropVisual: React.FC<{
         <span>{consumedWater.toLocaleString()} ml</span>
       </div>
     </div>
+
   );
 };
 

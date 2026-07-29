@@ -38,11 +38,21 @@
             .catch((err) => console.error('Service Worker registration failed:', err));
         });
 
-        // Detect service worker updates and auto-reload open tabs immediately to display the new version
+        // Apply service worker updates when the tab is idle — not mid-form (e.g. account reset).
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (refreshing) return;
+          sessionStorage.setItem('hellocal_sw_reload_pending', '1');
+          if (document.visibilityState === 'hidden') {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible') return;
+          if (!sessionStorage.getItem('hellocal_sw_reload_pending') || refreshing) return;
           refreshing = true;
+          sessionStorage.removeItem('hellocal_sw_reload_pending');
           window.location.reload();
         });
       }

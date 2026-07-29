@@ -76,7 +76,7 @@ export const AnalyticsMicroPanel: React.FC<AnalyticsMicroPanelProps> = ({ items,
               <div className="analytics-micro-compact-track" aria-hidden>
                 <div
                   className="analytics-micro-compact-fill"
-                  style={{ width: `${pct}%`, background: fill }}
+                  style={{ '--progress-scale': Math.min(pct / 100, 1), background: fill } as React.CSSProperties}
                 />
               </div>
             </li>

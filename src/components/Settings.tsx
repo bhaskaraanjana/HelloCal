@@ -6,6 +6,7 @@ import { Eye, EyeOff, Sparkles, ShieldAlert, Key, HardDriveDownload, HardDriveUp
 import { APP_VERSION, COMMIT_HASH } from '../version';
 import { AccountSection, type CloudSyncStatus } from './AccountSection';
 import type { CloudAccount } from '../services/cloudSync';
+import { CustomModal } from './ui/CustomModal';
 
 interface SettingsProps {
   apiKey: string;
@@ -87,6 +88,49 @@ export const Settings: React.FC<SettingsProps> = ({
   const [keyInput, setKeyInput] = useState(apiKey);
   const [showKey, setShowKey] = useState(false);
 
+  const [customDialog, setCustomDialog] = useState<{
+    isOpen: boolean;
+    type: 'alert' | 'confirm';
+    title: string;
+    message: string;
+    onConfirm?: () => void;
+    onDismiss?: () => void;
+  }>({
+    isOpen: false,
+    type: 'alert',
+    title: '',
+    message: '',
+  });
+
+  const showCustomAlert = (title: string, message: string, onConfirm?: () => void) => {
+    setCustomDialog({
+      isOpen: true,
+      type: 'alert',
+      title,
+      message,
+      onConfirm: () => {
+        setCustomDialog(d => ({ ...d, isOpen: false }));
+        if (onConfirm) onConfirm();
+      }
+    });
+  };
+
+  const showCustomConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setCustomDialog({
+      isOpen: true,
+      type: 'confirm',
+      title,
+      message,
+      onConfirm: () => {
+        setCustomDialog(d => ({ ...d, isOpen: false }));
+        onConfirm();
+      },
+      onDismiss: () => {
+        setCustomDialog(d => ({ ...d, isOpen: false }));
+      }
+    });
+  };
+
   const [saveStatus, setSaveStatus] = useState<{ [key: string]: boolean }>({});
 
   const triggerSaveStatus = (key: string) => {
@@ -133,21 +177,27 @@ export const Settings: React.FC<SettingsProps> = ({
       const content = event.target?.result as string;
       const success = onImportData(content);
       if (success) {
-        alert('Data successfully imported and active! Reloading...');
-        window.location.reload();
+        showCustomAlert('Import Successful', 'Data successfully imported and active! Click OK to reload.', () => {
+          window.location.reload();
+        });
       } else {
-        alert('Failed to import data. Please verify the JSON file structure.');
+        showCustomAlert('Import Failed', 'Failed to import data. Please verify the JSON file structure.');
       }
     };
     reader.readAsText(file);
   };
 
   const handleResetWithConfirmation = () => {
-    if (confirm('CAUTION: Are you absolutely sure you want to wipe all logs, calorie goals, and API keys? This operation is irreversible!')) {
-      onClearData();
-      alert('All local database items have been purged.');
-      window.location.reload();
-    }
+    showCustomConfirm(
+      'Caution: Wipe Local Data',
+      'Are you absolutely sure you want to wipe all logs, calorie goals, and API keys? This operation is irreversible!',
+      () => {
+        onClearData();
+        showCustomAlert('Database Purged', 'All local database items have been purged. Click OK to reload.', () => {
+          window.location.reload();
+        });
+      }
+    );
   };
 
   const handleSelectAiProvider = (provider: AiProvider) => {
@@ -491,6 +541,58 @@ export const Settings: React.FC<SettingsProps> = ({
       <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', paddingTop: '0.5rem' }}>
         HelloCal v{APP_VERSION} (Commit: {COMMIT_HASH})
       </div>
+
+      {customDialog.isOpen && (
+        <CustomModal
+          isOpen={customDialog.isOpen}
+          onClose={() => {
+            if (customDialog.type === 'confirm' && customDialog.onDismiss) {
+              customDialog.onDismiss();
+            } else if (customDialog.type === 'alert' && customDialog.onConfirm) {
+              customDialog.onConfirm();
+            } else {
+              setCustomDialog(d => ({ ...d, isOpen: false }));
+            }
+          }}
+          title={customDialog.title}
+          size="sm"
+          footer={
+            customDialog.type === 'confirm' ? (
+              <>
+                <button
+                  onClick={() => {
+                    if (customDialog.onDismiss) customDialog.onDismiss();
+                    else setCustomDialog(d => ({ ...d, isOpen: false }));
+                  }}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={customDialog.onConfirm}
+                  className="btn btn-danger"
+                  style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                >
+                  Confirm
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={customDialog.onConfirm}
+                className="btn btn-primary"
+                style={{ fontSize: '0.85rem', padding: '0.5rem 1rem', width: '80px' }}
+              >
+                OK
+              </button>
+            )
+          }
+        >
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textAlign: 'center', padding: '0.5rem 0' }}>
+            {customDialog.message}
+          </div>
+        </CustomModal>
+      )}
 
     </div>
   );

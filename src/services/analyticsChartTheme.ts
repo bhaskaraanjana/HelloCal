@@ -39,7 +39,7 @@ export function analyticsScales(xTickRotation = 0) {
     x: {
       grid: { display: false },
       ticks: {
-        color: '#8b9cb3',
+        color: '#aab6c7',
         font: { family: 'Outfit', size: 10 },
         maxRotation: xTickRotation,
         minRotation: xTickRotation,
@@ -49,7 +49,7 @@ export function analyticsScales(xTickRotation = 0) {
     y: {
       grid: { color: 'rgba(255, 255, 255, 0.045)' },
       border: { display: false },
-      ticks: { color: '#8b9cb3', font: { family: 'Outfit', size: 11 }, padding: 6 },
+      ticks: { color: '#aab6c7', font: { family: 'Outfit', size: 11 }, padding: 6 },
     },
   };
 }

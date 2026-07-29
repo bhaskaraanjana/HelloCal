@@ -64,6 +64,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
   onComplete,
   onSkip,
 }) => {
+  const [step, setStep] = useState(1);
   const [sex, setSex] = useState<Sex | undefined>(initialProfile.sex);
   const [age, setAge] = useState<string>(
     initialProfile.age != null ? String(initialProfile.age) : ''
@@ -143,6 +144,23 @@ const Onboarding: React.FC<OnboardingProps> = ({
 
   const tdee = useMemo(() => calcTDEE(draftProfile), [draftProfile]);
   const derivedGoals = useMemo(() => deriveGoals(draftProfile), [draftProfile]);
+
+  const isStep1Valid = useMemo(() => {
+    const parsedAge = parseInt(age, 10);
+    const parsedWeight = parseFloat(weightInput);
+    return (
+      sex !== undefined &&
+      Number.isFinite(parsedAge) &&
+      parsedAge > 0 &&
+      Number.isFinite(parsedWeight) &&
+      parsedWeight > 0 &&
+      resolvedHeightCm !== undefined
+    );
+  }, [sex, age, weightInput, resolvedHeightCm]);
+
+  const isStep2Valid = useMemo(() => {
+    return activityLevel !== undefined && goalDirection !== undefined;
+  }, [activityLevel, goalDirection]);
 
   if (!isOpen) return null;
 
@@ -250,11 +268,28 @@ const Onboarding: React.FC<OnboardingProps> = ({
         {/* Header */}
         <div
           style={{
-            padding: '1.75rem 1.75rem 1.25rem 1.75rem',
+            padding: '1.5rem 1.75rem 1rem 1.75rem',
             textAlign: 'center',
             borderBottom: '1px solid var(--border-glass)',
           }}
         >
+          {/* Progress Indicators */}
+          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginBottom: '1rem' }}>
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                style={{
+                  width: '36px',
+                  height: '4px',
+                  borderRadius: '2px',
+                  background: s <= step ? 'var(--accent-purple)' : 'rgba(255, 255, 255, 0.08)',
+                  boxShadow: s <= step ? '0 0 8px var(--accent-purple-glow)' : 'none',
+                  transition: 'background-color 0.3s ease, box-shadow 0.3s ease'
+                }}
+              />
+            ))}
+          </div>
+
           <div
             style={{
               width: 56,
@@ -277,261 +312,287 @@ const Onboarding: React.FC<OnboardingProps> = ({
               fontSize: '1.6rem',
               fontWeight: 800,
               margin: 0,
-              background: 'linear-gradient(to right, var(--text-primary), var(--accent-purple))',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
+              color: 'var(--text-primary)',
             }}
           >
-            Welcome to HelloCal
+            Welcome to Hello<span style={{ color: 'var(--accent-purple)' }}>Cal</span>
           </h2>
           <p style={{ color: 'var(--text-secondary)', margin: '0.5rem 0 0 0', fontSize: '0.95rem' }}>
-            Let&apos;s personalize your targets in a few quick taps.
+            {step === 1 && 'Let\'s personalize your bio metrics.'}
+            {step === 2 && 'How active are you, and what is your goal?'}
+            {step === 3 && 'Here is your personalized daily nutrition target plan.'}
           </p>
         </div>
 
         {/* Scrollable body */}
         <div style={{ padding: '1.5rem 1.75rem', overflowY: 'auto', flex: 1 }}>
-          {/* Section: About you */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>
-              <User size={15} color="var(--accent-purple)" /> About you
-            </div>
+          {step === 1 && (
+            <div style={sectionStyle}>
+              <div style={sectionTitleStyle}>
+                <User size={15} color="var(--accent-purple)" /> About you
+              </div>
 
-            {/* Sex + Age — one row; sex gets more width */}
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
-              <div className="input-group" style={{ flex: 1.65, marginBottom: 0 }}>
-                <label className="input-label">Sex</label>
-                <div style={{ display: 'flex', gap: '0.6rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSex('male')}
-                    aria-pressed={sex === 'male'}
-                    style={{
-                      ...toggleBtnBase,
-                      ...(sex === 'male'
-                        ? activeToggle('var(--accent-blue)', 'var(--accent-blue-glow)')
-                        : {}),
-                    }}
-                  >
-                    Male
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSex('female')}
-                    aria-pressed={sex === 'female'}
-                    style={{
-                      ...toggleBtnBase,
-                      ...(sex === 'female'
-                        ? activeToggle('var(--accent-rose)', 'var(--accent-rose-glow)')
-                        : {}),
-                    }}
-                  >
-                    Female
-                  </button>
+              {/* Sex + Age — one row; sex gets more width */}
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
+                <div className="input-group" style={{ flex: 1.65, marginBottom: 0 }}>
+                  <label className="input-label">Sex</label>
+                  <div style={{ display: 'flex', gap: '0.6rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSex('male')}
+                      aria-pressed={sex === 'male'}
+                      style={{
+                        ...toggleBtnBase,
+                        ...(sex === 'male'
+                          ? activeToggle('var(--accent-blue)', 'var(--accent-blue-glow)')
+                          : {}),
+                      }}
+                    >
+                      Male
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSex('female')}
+                      aria-pressed={sex === 'female'}
+                      style={{
+                        ...toggleBtnBase,
+                        ...(sex === 'female'
+                          ? activeToggle('var(--accent-rose)', 'var(--accent-rose-glow)')
+                          : {}),
+                      }}
+                    >
+                      Female
+                    </button>
+                  </div>
+                </div>
+                <div className="input-group" style={{ flex: 0.85, marginBottom: 0 }}>
+                  <label className="input-label" htmlFor="onb-age">
+                    Age
+                  </label>
+                  <input
+                    id="onb-age"
+                    className="input-field"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={120}
+                    placeholder="years"
+                    value={age}
+                    onChange={(e) => setAge(e.target.value)}
+                  />
                 </div>
               </div>
-              <div className="input-group" style={{ flex: 0.85, marginBottom: 0 }}>
-                <label className="input-label" htmlFor="onb-age">
-                  Age
+
+              {/* Weight — full row with unit toggle */}
+              <div className="input-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="input-label" htmlFor="onb-weight">
+                  Weight
                 </label>
-                <input
-                  id="onb-age"
-                  className="input-field"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={120}
-                  placeholder="years"
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Weight — full row with unit toggle */}
-            <div className="input-group">
-              <label className="input-label" htmlFor="onb-weight">
-                Weight
-              </label>
-              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
-                <input
-                  id="onb-weight"
-                  className="input-field"
-                  type="number"
-                  inputMode="decimal"
-                  min={1}
-                  placeholder={weightUnit}
-                  value={weightInput}
-                  onChange={(e) => setWeightInput(e.target.value)}
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                {unitToggle(['kg', 'lb'], weightUnit, (u) => handleSwitchUnit(u as 'kg' | 'lb'), 'Weight unit')}
-              </div>
-            </div>
-
-            {/* Height — full row with cm / ft toggle */}
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <label className="input-label">Height</label>
-              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
-                {heightUnit === 'cm' ? (
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
                   <input
-                    id="onb-height-cm"
+                    id="onb-weight"
                     className="input-field"
                     type="number"
                     inputMode="decimal"
-                    min={50}
-                    max={260}
-                    placeholder="cm"
-                    value={heightCmInput}
-                    onChange={(e) => setHeightCmInput(e.target.value)}
+                    min={1}
+                    placeholder={weightUnit}
+                    value={weightInput}
+                    onChange={(e) => setWeightInput(e.target.value)}
                     style={{ flex: 1, minWidth: 0 }}
                   />
-                ) : (
-                  <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 0, alignItems: 'stretch' }}>
-                    <input
-                      id="onb-height-ft"
-                      className="input-field"
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      max={8}
-                      placeholder="ft"
-                      value={heightFtInput}
-                      onChange={(e) => setHeightFtInput(e.target.value)}
-                      style={{ flex: 1, minWidth: 0 }}
-                      aria-label="Height feet"
-                    />
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexShrink: 0, alignSelf: 'center' }}>ft</span>
-                    <input
-                      id="onb-height-in"
-                      className="input-field"
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      max={11}
-                      placeholder="in"
-                      value={heightInInput}
-                      onChange={(e) => setHeightInInput(e.target.value)}
-                      style={{ flex: 1, minWidth: 0 }}
-                      aria-label="Height inches"
-                    />
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexShrink: 0, alignSelf: 'center' }}>in</span>
-                  </div>
-                )}
-                {unitToggle(['cm', 'ft'], heightUnit, (u) => handleSwitchHeightUnit(u as 'cm' | 'ft'), 'Height unit')}
-              </div>
-            </div>
-          </div>
-
-          {/* Section: Activity */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>
-              <Activity size={15} color="var(--accent-teal)" /> Activity level
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {ACTIVITY_OPTIONS.map((level) => {
-                const active = activityLevel === level;
-                return (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setActivityLevel(level)}
-                    aria-pressed={active}
-                    style={{
-                      textAlign: 'left',
-                      padding: '0.7rem 0.95rem',
-                      borderRadius: '12px',
-                      border: `1px solid ${active ? 'var(--accent-teal)' : 'var(--border-glass)'}`,
-                      background: active ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
-                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      fontFamily: 'var(--font-body)',
-                      fontSize: '0.9rem',
-                      fontWeight: active ? 600 : 400,
-                      cursor: 'pointer',
-                      transition: 'var(--transition-smooth)',
-                      boxShadow: active ? '0 0 12px var(--accent-teal-glow)' : 'none',
-                    }}
-                  >
-                    {ACTIVITY_LABELS[level]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section: Goal */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>
-              <Target size={15} color="var(--accent-amber)" /> Your goal
-            </div>
-            <div style={{ display: 'flex', gap: '0.6rem' }}>
-              {GOAL_OPTIONS.map((goal) => {
-                const active = goalDirection === goal;
-                const accent = GOAL_ACCENTS[goal];
-                return (
-                  <button
-                    key={goal}
-                    type="button"
-                    onClick={() => setGoalDirection(goal)}
-                    aria-pressed={active}
-                    style={{
-                      ...toggleBtnBase,
-                      fontSize: '0.85rem',
-                      ...(active
-                        ? {
-                            background: 'rgba(255,255,255,0.06)',
-                            color: 'var(--text-primary)',
-                            borderColor: accent,
-                            boxShadow: `0 0 12px ${accent}`,
-                          }
-                        : {}),
-                    }}
-                  >
-                    {GOAL_LABELS[goal]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Live preview */}
-          <div
-            className="glass-card"
-            style={{
-              padding: '1.1rem 1.25rem',
-              borderColor: derivedGoals ? 'var(--border-glass-glow)' : 'var(--border-glass)',
-            }}
-          >
-            {derivedGoals && tdee != null ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Maintenance (TDEE)
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    {tdee.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>kcal</span>
-                  </div>
-                </div>
-                <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-glass)' }} />
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Your daily target
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.7rem', fontWeight: 800, color: 'var(--accent-purple)', textShadow: '0 0 18px var(--accent-purple-glow)' }}>
-                    {derivedGoals.calories.toLocaleString()} <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>kcal</span>
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                    {derivedGoals.protein}g protein · {derivedGoals.carbs}g carbs · {derivedGoals.fat}g fat
-                  </div>
+                  {unitToggle(['kg', 'lb'], weightUnit, (u) => handleSwitchUnit(u as 'kg' | 'lb'), 'Weight unit')}
                 </div>
               </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                <Sparkles size={16} color="var(--accent-purple)" />
-                <span>Fill in the fields above and we&apos;ll compute your personalized calorie target.</span>
+
+              {/* Height — full row with cm / ft toggle */}
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label className="input-label">Height</label>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
+                  {heightUnit === 'cm' ? (
+                    <input
+                      id="onb-height-cm"
+                      className="input-field"
+                      type="number"
+                      inputMode="decimal"
+                      min={50}
+                      max={260}
+                      placeholder="cm"
+                      value={heightCmInput}
+                      onChange={(e) => setHeightCmInput(e.target.value)}
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 0, alignItems: 'stretch' }}>
+                      <input
+                        id="onb-height-ft"
+                        className="input-field"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={8}
+                        placeholder="ft"
+                        value={heightFtInput}
+                        onChange={(e) => setHeightFtInput(e.target.value)}
+                        style={{ flex: 1, minWidth: 0 }}
+                        aria-label="Height feet"
+                      />
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexShrink: 0, alignSelf: 'center' }}>ft</span>
+                      <input
+                        id="onb-height-in"
+                        className="input-field"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={11}
+                        placeholder="in"
+                        value={heightInInput}
+                        onChange={(e) => setHeightInInput(e.target.value)}
+                        style={{ flex: 1, minWidth: 0 }}
+                        aria-label="Height inches"
+                      />
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexShrink: 0, alignSelf: 'center' }}>in</span>
+                    </div>
+                  )}
+                  {unitToggle(['cm', 'ft'], heightUnit, (u) => handleSwitchHeightUnit(u as 'cm' | 'ft'), 'Height unit')}
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <>
+              {/* Section: Activity */}
+              <div style={sectionStyle}>
+                <div style={sectionTitleStyle}>
+                  <Activity size={15} color="var(--accent-teal)" /> Activity level
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {ACTIVITY_OPTIONS.map((level) => {
+                    const active = activityLevel === level;
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setActivityLevel(level)}
+                        aria-pressed={active}
+                        style={{
+                          textAlign: 'left',
+                          padding: '0.7rem 0.95rem',
+                          borderRadius: '12px',
+                          border: `1px solid ${active ? 'var(--accent-teal)' : 'var(--border-glass)'}`,
+                          background: active ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
+                          color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '0.9rem',
+                          fontWeight: active ? 600 : 400,
+                          cursor: 'pointer',
+                          transition: 'var(--transition-smooth)',
+                          boxShadow: active ? '0 0 12px var(--accent-teal-glow)' : 'none',
+                        }}
+                      >
+                        {ACTIVITY_LABELS[level]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section: Goal */}
+              <div style={{ ...sectionStyle, marginBottom: 0 }}>
+                <div style={sectionTitleStyle}>
+                  <Target size={15} color="var(--accent-amber)" /> Your goal
+                </div>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  {GOAL_OPTIONS.map((goal) => {
+                    const active = goalDirection === goal;
+                    const accent = GOAL_ACCENTS[goal];
+                    return (
+                      <button
+                        key={goal}
+                        type="button"
+                        onClick={() => setGoalDirection(goal)}
+                        aria-pressed={active}
+                        style={{
+                          ...toggleBtnBase,
+                          fontSize: '0.85rem',
+                          ...(active
+                            ? {
+                                background: 'rgba(255,255,255,0.06)',
+                                color: 'var(--text-primary)',
+                                borderColor: accent,
+                                boxShadow: `0 0 12px ${accent}`,
+                              }
+                            : {}),
+                        }}
+                      >
+                        {GOAL_LABELS[goal]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <div
+              className="glass-card"
+              style={{
+                padding: '1.25rem 1.5rem',
+                borderColor: derivedGoals ? 'var(--border-glass-glow)' : 'var(--border-glass)',
+                background: 'rgba(255, 255, 255, 0.01)',
+              }}
+            >
+              {derivedGoals && tdee != null ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                    <div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Maintenance (TDEE)
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        {tdee.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>kcal</span>
+                      </div>
+                    </div>
+                    <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-glass)' }} />
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Your daily target
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.7rem', fontWeight: 800, color: 'var(--accent-purple)', textShadow: '0 0 18px var(--accent-purple-glow)', marginTop: '0.2rem' }}>
+                        {derivedGoals.calories.toLocaleString()} <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>kcal</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: '1px dashed var(--border-glass)', paddingTop: '1rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                      Target Macronutrients
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                      <div style={{ flex: 1, background: 'rgba(139, 92, 246, 0.05)', border: '1px solid rgba(139, 92, 246, 0.15)', borderRadius: '10px', padding: '0.5rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>Protein</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.1rem' }}>{derivedGoals.protein}g</div>
+                      </div>
+                      <div style={{ flex: 1, background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.15)', borderRadius: '10px', padding: '0.5rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>Carbs</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.1rem' }}>{derivedGoals.carbs}g</div>
+                      </div>
+                      <div style={{ flex: 1, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: '10px', padding: '0.5rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>Fat</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.1rem' }}>{derivedGoals.fat}g</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                  <Sparkles size={16} color="var(--accent-purple)" />
+                  <span>Fill in the fields above and we&apos;ll compute your personalized calorie target.</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer actions */}
@@ -544,36 +605,120 @@ const Onboarding: React.FC<OnboardingProps> = ({
             gap: '0.6rem',
           }}
         >
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleBuildPlan}
-            disabled={!derivedGoals}
-            style={{
-              width: '100%',
-              opacity: derivedGoals ? 1 : 0.45,
-              cursor: derivedGoals ? 'pointer' : 'not-allowed',
-            }}
-          >
-            <Sparkles size={18} /> Build my plan
-          </button>
-          <button
-            type="button"
-            onClick={onSkip}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-display)',
-              fontWeight: 500,
-              fontSize: '0.9rem',
-              padding: '0.4rem',
-              cursor: 'pointer',
-              transition: 'var(--transition-smooth)',
-            }}
-          >
-            Skip for now
-          </button>
+          {step === 1 && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setStep(2)}
+                disabled={!isStep1Valid}
+                style={{
+                  width: '100%',
+                  opacity: isStep1Valid ? 1 : 0.45,
+                  cursor: isStep1Valid ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Next: Activity & Goal
+              </button>
+              <button
+                type="button"
+                onClick={onSkip}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 500,
+                  fontSize: '0.9rem',
+                  padding: '0.4rem',
+                  cursor: 'pointer',
+                  transition: 'var(--transition-smooth)',
+                }}
+              >
+                Skip for now
+              </button>
+            </>
+          )}
+
+          {step === 2 && (
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStep(1)}
+                style={{ flex: 1, fontSize: '0.9rem', padding: '0.8rem 1rem' }}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setStep(3)}
+                disabled={!isStep2Valid}
+                style={{
+                  flex: 2.2,
+                  opacity: isStep2Valid ? 1 : 0.45,
+                  cursor: isStep2Valid ? 'pointer' : 'not-allowed',
+                  fontSize: '0.9rem',
+                  padding: '0.8rem 1rem',
+                }}
+              >
+                Next: View Target
+              </button>
+            </div>
+          )}
+
+          {step === 3 && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleBuildPlan}
+                disabled={!derivedGoals}
+                style={{
+                  width: '100%',
+                  opacity: derivedGoals ? 1 : 0.45,
+                  cursor: derivedGoals ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <Sparkles size={18} /> Build my plan
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', padding: '0 0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    fontFamily: 'var(--font-display)',
+                    fontWeight: 500,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    padding: '0.2rem',
+                  }}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={onSkip}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    fontFamily: 'var(--font-display)',
+                    fontWeight: 500,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    padding: '0.2rem',
+                  }}
+                >
+                  Skip for now
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

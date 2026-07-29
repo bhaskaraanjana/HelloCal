@@ -1145,6 +1145,21 @@ export const App: React.FC = () => {
             src="/logo.svg"
             alt="HelloCal Logo"
             className="header-logo"
+            onClick={(e) => {
+              confetti({
+                particleCount: 60,
+                spread: 90,
+                origin: { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight },
+                colors: ['#ff007f', '#00ffff', '#00ff00']
+              });
+              const img = e.currentTarget;
+              img.style.animation = 'none';
+              void img.offsetWidth; // Reflow
+              img.style.animation = 'chromatic-glitch 0.35s steps(2, end)';
+            }}
+            onAnimationEnd={(e) => {
+              e.currentTarget.style.animation = 'none';
+            }}
           />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <h1 className="logo-text" style={{ margin: 0 }}>Hello<span>Cal</span></h1>

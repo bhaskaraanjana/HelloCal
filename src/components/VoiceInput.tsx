@@ -100,6 +100,37 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
   const aiReady = isAiReady(aiAccess);
 
+  // Keyboard shortcut listener for voice recording (Spacebar toggles)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl) {
+        const tagName = activeEl.tagName.toUpperCase();
+        if (
+          tagName === 'INPUT' ||
+          tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true'
+        ) {
+          return;
+        }
+      }
+
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        if (status === 'idle') {
+          startRecording();
+        } else if (status === 'recording') {
+          stopRecording();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [status, aiReady]);
+
   // Upload/Process Audio Blob
   const processAudio = async (blob: Blob) => {
     if (!aiReady) {
@@ -282,7 +313,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', maxWidth: '420px', margin: '0 auto', lineHeight: 1.45 }}>
               {status === 'idle' && (
                 aiReady
-                  ? 'Talk, snap a photo, scan a barcode, or type below.'
+                  ? 'Talk (or press Space), snap a photo, scan a barcode, or type below.'
                   : aiAccess.provider === 'hosted'
                     ? 'Sign in with Google in Settings for voice & photo AI, or type / scan a barcode now.'
                     : 'Scan a barcode or type what you ate. Add a Gemini key in Settings for voice & photo.'
@@ -321,8 +352,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               {/* Voice Pill */}
               <button
                 onClick={startRecording}
-                title="Voice Log"
-                aria-label="Start voice logging"
+                title="Voice Log (Press Space)"
+                aria-label="Start voice logging (Press Space)"
                 style={{
                   width: '80px',
                   height: '80px',

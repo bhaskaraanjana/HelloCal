@@ -141,10 +141,15 @@ export async function pullData(): Promise<{ json: string; updatedAt: string } | 
 /** Start Google OAuth (redirects away and returns on callback). */
 export async function signInWithGoogle(): Promise<void> {
   const c = await requireClient();
-  const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+  const redirectTo = typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname || '/'}`
+    : undefined;
   const { error } = await c.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo },
+    options: {
+      redirectTo,
+      queryParams: { prompt: 'select_account' },
+    },
   });
   if (error) throw new Error(error.message);
 }

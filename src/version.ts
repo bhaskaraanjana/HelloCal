@@ -1,5 +1,5 @@
-export const APP_VERSION = '1.0.87';
-export const COMMIT_HASH = '99c9fde';
+export const APP_VERSION = '1.0.88';
+export const COMMIT_HASH = '1e3aa92';
 
 
 

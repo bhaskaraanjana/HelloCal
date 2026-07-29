@@ -56,6 +56,7 @@ Under [Auth → URL Configuration](https://supabase.com/dashboard/project/csybxu
 - **Site URL:** `https://hellocal.infinitemind.space`
 - **Redirect URLs** (add all):
   - `https://hellocal.infinitemind.space`
+  - `https://cal.infinitemind.space`
   - `http://localhost:5173`
   - `http://127.0.0.1:5173`
 
@@ -94,7 +95,7 @@ Set these environment variables on your host (same values as `.env.local`):
 - `VITE_SUPABASE_URL=https://csybxucdwidbibltmvwg.supabase.co`
 - `VITE_SUPABASE_ANON_KEY=<anon key from dashboard>`
 
-Rebuild/redeploy after changing env vars. Google sign-in uses `window.location.origin` for the post-auth redirect, so it works on production once the URLs above are whitelisted in Supabase.
+**Vercel:** add both vars under Project → Settings → Environment Variables for **Production** and **Preview**. Use a normal `https://` URL (no backslashes). Wrong paste examples that break auth: `https:\project.supabase.co` or an empty anon key. Redeploy after changes (`vercel --prod` or push to `main`).
 
 ## How it works
 

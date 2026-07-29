@@ -3,7 +3,22 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // Cloud sync is OPTIONAL. The app is fully functional offline with localStorage;
 // Supabase only adds cross-device backup/sync when these env vars are provided
 // at build time (see SUPABASE.md / .env.example).
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+function normalizeSupabaseUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let value = raw.trim().replace(/\\/g, '/');
+  if (!/^https?:\/\//i.test(value)) {
+    value = `https://${value.replace(/^\/+/, '')}`;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return undefined;
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+const SUPABASE_URL = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 /** True when both Supabase env vars are present — gates all cloud-sync UI/logic. */
