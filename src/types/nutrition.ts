@@ -222,6 +222,14 @@ export interface Supplement {
   schedule: string;
   takenToday: boolean;
   lastTakenTimestamp?: number;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  addedSugar?: number;
+  fiber?: number;
+  sodium?: number;
+  iron?: number;
 }
 
 export interface MealPreset {

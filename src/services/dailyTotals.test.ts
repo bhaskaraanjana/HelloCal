@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeDailyTotals } from './dailyTotals';
-import type { FoodItem, MealLog, WorkoutLog } from '../types/nutrition';
+import type { FoodItem, MealLog, WorkoutLog, Supplement } from '../types/nutrition';
 
 const DAY = 86400000;
 const TS = new Date(2026, 5, 13, 12, 0, 0).getTime(); // local noon, 2026-06-13
@@ -81,5 +81,17 @@ describe('computeDailyTotals', () => {
     expect(t.consumedCalories).toBe(0);
     expect(t.todayLogs).toEqual([]);
     expect(t.breakfastCount).toBe(0);
+  });
+
+  it('sums taken supplements to micro/macro daily totals', () => {
+    const supplements: Supplement[] = [
+      { id: 's1', name: 'Protein powder', dosage: '1 scoop', schedule: 'Morning', takenToday: true, calories: 120, protein: 25, carbs: 2 },
+      { id: 's2', name: 'Fish oil', dosage: '1 softgel', schedule: 'Evening', takenToday: false, calories: 10, fat: 1 },
+    ];
+    const t = computeDailyTotals([], [], Date.now(), supplements);
+    expect(t.consumedCalories).toBe(120);
+    expect(t.consumedProtein).toBe(25);
+    expect(t.consumedCarbs).toBe(2);
+    expect(t.consumedFat).toBe(0);
   });
 });

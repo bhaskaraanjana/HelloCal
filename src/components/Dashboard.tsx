@@ -6,6 +6,7 @@ import ProgressBar from './ui/ProgressBar';
 import { HydrationTracker } from './HydrationTracker';
 import { SupplementTracker } from './SupplementTracker';
 import { computeDailyTotals, sumFieldKey } from '../services/dailyTotals';
+import { updateNutrientGoals } from '../services/nutritionMath';
 import { gemini } from '../services/gemini';
 import { MICRO_FIELD_ALIASES, DATA_BACKED_MICRO_FIELDS as DATA_BACKED_FIELDS, canonicalMicroUnit, canonicalMicroFieldKey } from '../services/sanitize';
 import { MACRO_TRACKING_ROWS, type MacroGoalKey } from '../services/trackingCatalog';
@@ -151,7 +152,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     consumedCalories, consumedProtein, consumedCarbs, consumedFat,
     totalBurnedCalories,
     breakfastCount, lunchCount, dinnerCount, snackCount,
-  } = useMemo(() => computeDailyTotals(logs, workouts), [logs, workouts]);
+  } = useMemo(() => computeDailyTotals(logs, workouts, Date.now(), supplements), [logs, workouts, supplements]);
 
   const baseCalorieGoal = Number(goals.calories) || 2000;
   const expandedCalorieGoal = baseCalorieGoal + totalBurnedCalories;
@@ -375,8 +376,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
           protein: consumedProtein,
           carbs: consumedCarbs,
           fat: consumedFat,
-          saturatedFat: sumFieldKey(todayLogs, 'saturatedFat'),
-          transFat: sumFieldKey(todayLogs, 'transFat'),
+          saturatedFat: sumFieldKey(logs, 'saturatedFat', Date.now(), supplements),
+          transFat: sumFieldKey(logs, 'transFat', Date.now(), supplements),
         };
         return (
           <div>
@@ -408,7 +409,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="dashboard-micro-list">
             {shown.map((m) => {
               if (DATA_BACKED_FIELDS.has(m.fieldKey)) {
-                const consumed = sumFieldKey(todayLogs, m.fieldKey);
+                const consumed = sumFieldKey(logs, m.fieldKey, Date.now(), supplements);
                 const over = m.isLimit && consumed > m.dailyLimit;
                 return (
                   <ProgressBar
@@ -474,10 +475,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const iconBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'pointer' };
 
     if (key === 'calorieHalo') {
-      const setCal = (cal: number) => { const g = { ...draftGoals, calories: cal }; setDraftGoals(g); onSaveGoals?.(g); };
+      const setCal = (cal: number) => { const g = updateNutrientGoals(cal, draftGoals); setDraftGoals(g); onSaveGoals?.(g); };
       return (
         <>
-          {numInput('Base calorie target', draftGoals.calories, (n) => setDraftGoals({ ...draftGoals, calories: n }), 'kcal')}
+          {numInput('Base calorie target', draftGoals.calories, (n) => setDraftGoals(updateNutrientGoals(n, draftGoals)), 'kcal')}
           <button type="button" onClick={applyGoals} className="btn btn-primary" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>Apply</button>
           <div style={{ marginTop: '0.85rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Quick goal</span>

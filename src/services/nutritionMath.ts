@@ -96,3 +96,24 @@ export function deriveGoals(profile: UserProfile): UserGoals | null {
     waterTarget,
   };
 }
+
+export function updateNutrientGoals(calories: number, currentGoals: UserGoals): UserGoals {
+  const protein = currentGoals.protein || 130;
+  const proteinCals = protein * 4;
+  let fat = Math.round((calories * 0.25) / 9);
+  if (proteinCals + fat * 9 > calories) {
+    fat = Math.max(0, Math.round((calories - proteinCals) / 9));
+  }
+  const fatCals = fat * 9;
+  const carbs = Math.max(0, Math.round((calories - proteinCals - fatCals) / 4));
+  const fiber = calories >= 2000 ? 38 : 25;
+
+  return {
+    ...currentGoals,
+    calories,
+    protein,
+    carbs,
+    fat,
+    fiber,
+  };
+}

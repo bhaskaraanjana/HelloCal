@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcBMR, calcTDEE, deriveGoals, kgToLb, lbToKg, cmToFeetInches, feetInchesToCm } from './nutritionMath';
+import { calcBMR, calcTDEE, deriveGoals, kgToLb, lbToKg, cmToFeetInches, feetInchesToCm, updateNutrientGoals } from './nutritionMath';
 import type { UserProfile } from '../types/nutrition';
 
 describe('weight conversions', () => {
@@ -78,5 +78,19 @@ describe('deriveGoals', () => {
     expect(g.carbs).toBeGreaterThanOrEqual(0);
     const macroKcal = g.protein * 4 + g.carbs * 4 + g.fat * 9;
     expect(macroKcal).toBeLessThanOrEqual(g.calories + 10); // within rounding
+  });
+});
+
+describe('updateNutrientGoals', () => {
+  it('correctly updates macro limits when calorie target is changed', () => {
+    const current = { calories: 2000, protein: 130, carbs: 220, fat: 65, fiber: 30 };
+    const next = updateNutrientGoals(1600, current);
+    expect(next.calories).toBe(1600);
+    expect(next.protein).toBe(130);
+    expect(next.fiber).toBe(25); // calories < 2000 -> 25g fiber
+    expect(next.fat).toBe(Math.round((1600 * 0.25) / 9)); // 44g fat
+    // Carbs should fill the rest
+    const macroKcal = next.protein * 4 + next.carbs * 4 + next.fat * 9;
+    expect(Math.abs(macroKcal - 1600)).toBeLessThan(15);
   });
 });

@@ -1,6 +1,6 @@
-import type { MealLog, WorkoutLog } from '../types/nutrition';
+import type { MealLog, WorkoutLog, Supplement } from '../types/nutrition';
 import { dayRange } from './insights';
-import { readFoodItemNutrient } from './nutrientValue';
+import { readFoodItemNutrient, canonicalMicroFieldKey } from './nutrientValue';
 
 export interface DailyTotals {
   todayLogs: MealLog[];
@@ -27,6 +27,21 @@ const n = (v: unknown): number => {
   return Number.isFinite(x) ? x : 0;
 };
 
+export function readSupplementNutrient(s: Supplement, fieldKey: string): number {
+  const canonical = canonicalMicroFieldKey(fieldKey);
+  const raw = s as unknown as Record<string, unknown>;
+  if (raw[canonical] !== undefined && raw[canonical] !== null) {
+    return n(raw[canonical]);
+  }
+  const target = canonical.toLowerCase();
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof k === 'string' && k.toLowerCase() === target && v !== undefined && v !== null) {
+      return n(v);
+    }
+  }
+  return 0;
+}
+
 /**
  * The single source of truth for a day's consumed/burned nutrition totals.
  * Filters to the local-day window [start, end) containing `ts` (half-open, so
@@ -34,7 +49,12 @@ const n = (v: unknown): number => {
  * with Number()||0. Added sugar counts ONLY item.addedSugar — natural fruit/dairy
  * sugar must not count against the added-sugar target.
  */
-export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: number = Date.now()): DailyTotals {
+export function computeDailyTotals(
+  logs: MealLog[],
+  workouts: WorkoutLog[],
+  ts: number = Date.now(),
+  supplements: Supplement[] = []
+): DailyTotals {
   const { start, end } = dayRange(ts);
   const todayLogs = logs.filter((l) => l.timestamp >= start && l.timestamp < end);
   const todayWorkouts = workouts.filter((w) => w.timestamp >= start && w.timestamp < end);
@@ -82,6 +102,26 @@ export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: 
     t.totalWorkoutMinutes += n(w.duration);
   }
 
+  // Add active supplements taken on this day:
+  const activeSupps = supplements.filter((s) => {
+    const isToday = dayRange(Date.now()).start === start;
+    if (isToday) {
+      return s.takenToday;
+    }
+    return s.lastTakenTimestamp && s.lastTakenTimestamp >= start && s.lastTakenTimestamp < end;
+  });
+
+  for (const s of activeSupps) {
+    t.consumedCalories += readSupplementNutrient(s, 'calories');
+    t.consumedProtein += readSupplementNutrient(s, 'protein');
+    t.consumedCarbs += readSupplementNutrient(s, 'carbs');
+    t.consumedFat += readSupplementNutrient(s, 'fat');
+    t.consumedAddedSugar += readSupplementNutrient(s, 'addedSugar');
+    t.consumedFiber += readSupplementNutrient(s, 'fiber');
+    t.consumedSodium += readSupplementNutrient(s, 'sodium');
+    t.consumedIron += readSupplementNutrient(s, 'iron');
+  }
+
   return t;
 }
 
@@ -91,13 +131,19 @@ export function computeDailyTotals(logs: MealLog[], workouts: WorkoutLog[], ts: 
  * (fields the AI parser actually populates), never an arbitrary custom key, or the
  * result would be a misleading 0.
  */
-export function sumFieldKey(logs: MealLog[], fieldKey: string, ts: number = Date.now()): number {
+export function sumFieldKey(logs: MealLog[], fieldKey: string, ts: number = Date.now(), supplements: Supplement[] = []): number {
   const { start, end } = dayRange(ts);
-  return sumFieldKeyBetween(logs, fieldKey, start, end);
+  return sumFieldKeyBetween(logs, fieldKey, start, end, supplements);
 }
 
 /** Sum a FoodItem field across all logs in [start, end). */
-export function sumFieldKeyBetween(logs: MealLog[], fieldKey: string, start: number, end: number): number {
+export function sumFieldKeyBetween(
+  logs: MealLog[],
+  fieldKey: string,
+  start: number,
+  end: number,
+  supplements: Supplement[] = []
+): number {
   let total = 0;
   for (const log of logs) {
     if (log.timestamp < start || log.timestamp >= end) continue;
@@ -105,5 +151,18 @@ export function sumFieldKeyBetween(logs: MealLog[], fieldKey: string, start: num
       total += readFoodItemNutrient(item, fieldKey);
     }
   }
+
+  const activeSupps = supplements.filter((s) => {
+    const isToday = dayRange(Date.now()).start === dayRange(start).start;
+    if (isToday) {
+      return s.takenToday;
+    }
+    return s.lastTakenTimestamp && s.lastTakenTimestamp >= start && s.lastTakenTimestamp < end;
+  });
+
+  for (const s of activeSupps) {
+    total += readSupplementNutrient(s, fieldKey);
+  }
+
   return total;
 }

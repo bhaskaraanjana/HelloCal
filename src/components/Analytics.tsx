@@ -11,7 +11,7 @@ import {
   GitCompare,
   Sparkles,
 } from 'lucide-react';
-import { computeDailyTotals, sumFieldKeyBetween } from '../services/dailyTotals';
+import { computeDailyTotals, sumFieldKeyBetween, readSupplementNutrient } from '../services/dailyTotals';
 import { isDataBackedMicroField } from '../services/nutrientValue';
 import {
   MACRO_CALORIES_PER_GRAM,
@@ -52,7 +52,7 @@ import {
   goalLineDataset,
   priorPeriodDataset,
 } from '../services/analyticsChartTheme';
-import { computeStreak } from '../services/insights';
+import { computeStreak, dayRange } from '../services/insights';
 import { AnalyticsInsightsBar } from './analytics/AnalyticsInsightsBar';
 import { AnalyticsHeatmap } from './analytics/AnalyticsHeatmap';
 import { AnalyticsDayOfWeek } from './analytics/AnalyticsDayOfWeek';
@@ -78,9 +78,9 @@ const periodSummaryLabel = (period: AnalyticsPeriod, dayCount: number): string =
   return `Last ${period} days`;
 };
 
-const macroGramsForDay = (logs: MealLog[], goalKey: MacroGoalKey, dayTs: number): number => {
+const macroGramsForDay = (logs: MealLog[], goalKey: MacroGoalKey, dayTs: number, supplements: Supplement[] = []): number => {
   if (goalKey === 'protein' || goalKey === 'carbs' || goalKey === 'fat') {
-    const totals = computeDailyTotals(logs, [], dayTs);
+    const totals = computeDailyTotals(logs, [], dayTs, supplements);
     if (goalKey === 'protein') return Math.round(totals.consumedProtein);
     if (goalKey === 'carbs') return Math.round(totals.consumedCarbs);
     return Math.round(totals.consumedFat);
@@ -98,12 +98,19 @@ const macroGramsForDay = (logs: MealLog[], goalKey: MacroGoalKey, dayTs: number)
         const s = new Date(dayTs);
         s.setHours(0, 0, 0, 0);
         return s.getTime() + MS_PER_DAY;
-      })()
+      })(),
+      supplements
     )
   );
 };
 
-const macroPeriodGrams = (logs: MealLog[], goalKey: MacroGoalKey, start: number, end: number): number => {
+const macroPeriodGrams = (
+  logs: MealLog[],
+  goalKey: MacroGoalKey,
+  start: number,
+  end: number,
+  supplements: Supplement[] = []
+): number => {
   if (goalKey === 'protein' || goalKey === 'carbs' || goalKey === 'fat') {
     let total = 0;
     for (const log of logs) {
@@ -112,9 +119,20 @@ const macroPeriodGrams = (logs: MealLog[], goalKey: MacroGoalKey, start: number,
         total += Number(item[goalKey]) || 0;
       }
     }
+    const { start: todayStart } = dayRange(Date.now());
+    const isToday = dayRange(start).start === todayStart;
+    const activeSupps = supplements.filter((s) => {
+      if (isToday) {
+        return s.takenToday;
+      }
+      return s.lastTakenTimestamp && s.lastTakenTimestamp >= start && s.lastTakenTimestamp < end;
+    });
+    for (const s of activeSupps) {
+      total += readSupplementNutrient(s, goalKey);
+    }
     return total;
   }
-  return sumFieldKeyBetween(logs, goalKey, start, end);
+  return sumFieldKeyBetween(logs, goalKey, start, end, supplements);
 };
 
 const macroVisible = (appSettings: AppSettings, visibleKey: MacroGoalKey): boolean => {
@@ -173,22 +191,22 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   );
 
   const dailyCalories = useMemo(() => {
-    return rangeWindow.days.map((day) => computeDailyTotals(logs, [], day.getTime()).consumedCalories);
-  }, [logs, rangeWindow.days]);
+    return rangeWindow.days.map((day) => computeDailyTotals(logs, [], day.getTime(), supplements).consumedCalories);
+  }, [logs, rangeWindow.days, supplements]);
 
   const priorDailyCalories = useMemo(() => {
-    return priorDays.map((day) => computeDailyTotals(logs, [], day.getTime()).consumedCalories);
-  }, [logs, priorDays]);
+    return priorDays.map((day) => computeDailyTotals(logs, [], day.getTime(), supplements).consumedCalories);
+  }, [logs, priorDays, supplements]);
 
   const dailyMacroSeries = useMemo(() => {
     const series: Partial<Record<MacroGoalKey, number[]>> = {};
     for (const row of visibleMacroRows) {
       series[row.goalKey] = rangeWindow.days.map((day) =>
-        macroGramsForDay(logs, row.goalKey, day.getTime())
+        macroGramsForDay(logs, row.goalKey, day.getTime(), supplements)
       );
     }
     return series;
-  }, [logs, rangeWindow.days, visibleMacroRows]);
+  }, [logs, rangeWindow.days, visibleMacroRows, supplements]);
 
   const calorieChart = useMemo(
     () => chartSeriesFromDaily(rangeWindow, dailyCalories),
@@ -253,7 +271,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const macroDoughnutSlices = useMemo(() => {
     return visibleMacroRows
       .map((row) => {
-        const grams = macroPeriodGrams(logs, row.goalKey, rangeWindow.startOfPeriod, rangeWindow.endOfPeriod);
+        const grams = macroPeriodGrams(logs, row.goalKey, rangeWindow.startOfPeriod, rangeWindow.endOfPeriod, supplements);
         const calories = grams * MACRO_CALORIES_PER_GRAM[row.goalKey];
         return {
           label: row.name,
@@ -262,7 +280,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
         };
       })
       .filter((slice) => slice.calories > 0);
-  }, [logs, visibleMacroRows, rangeWindow.startOfPeriod, rangeWindow.endOfPeriod]);
+  }, [logs, visibleMacroRows, rangeWindow.startOfPeriod, rangeWindow.endOfPeriod, supplements]);
 
   const totalMacroCals = macroDoughnutSlices.reduce((sum, s) => sum + s.calories, 0);
   const hasMacroSplitData = totalMacroCals > 0;
@@ -275,11 +293,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({
           logs,
           micro.fieldKey,
           rangeWindow.startOfPeriod,
-          rangeWindow.endOfPeriod
+          rangeWindow.endOfPeriod,
+          supplements
         );
         return { micro, avg: total / rangeWindow.dayCount };
       });
-  }, [logs, visibleMicros, rangeWindow.startOfPeriod, rangeWindow.endOfPeriod, rangeWindow.dayCount]);
+  }, [logs, visibleMicros, rangeWindow.startOfPeriod, rangeWindow.endOfPeriod, rangeWindow.dayCount, supplements]);
 
   const insights = useMemo(
     () =>

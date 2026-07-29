@@ -1,5 +1,11 @@
 # Internal Documentation
 
+## Version 1.0.89
+* **Date**: July 29, 2026
+* **Changes**:
+  * **Dynamic Nutrient Limit Updates**: Automatically recalculates macro limits (protein, fat, carbs) and micro limits (fiber) when the calorie target is changed or updated on the dashboard.
+  * **Supplement Nutrient Integration**: Added optional macro/micro properties to supplements. Taken supplements now count directly towards daily calorie, macro, and micro consumed totals across the dashboard, progress rings, and analytics history.
+
 ## Version 1.0.88
 * **Date**: July 7, 2026
 * **Changes**:

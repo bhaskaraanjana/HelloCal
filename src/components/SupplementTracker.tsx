@@ -225,6 +225,101 @@ export const SupplementTracker: React.FC<SupplementTrackerProps> = ({
                     </select>
                   </label>
                 </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)' }}>Nutrient values (Optional)</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.4rem', marginTop: '0.35rem' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Calories</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.calories ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { calories: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="kcal"
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Protein</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.protein ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { protein: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="g"
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Carbs</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.carbs ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { carbs: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="g"
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Fat</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.fat ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { fat: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="g"
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.4rem', marginTop: '0.4rem' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Fiber</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.fiber ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { fiber: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="g"
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Sodium</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.sodium ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { sodium: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="mg"
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Sugar</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.addedSugar ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { addedSugar: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="g"
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                      <span>Iron</span>
+                      <input
+                        type="number"
+                        className="panel-settings-input"
+                        style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
+                        value={s.iron ?? ''}
+                        onChange={(e) => updateSupplement(s.id, { iron: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder="mg"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
