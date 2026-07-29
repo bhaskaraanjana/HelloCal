@@ -1,5 +1,11 @@
 # Internal Documentation
 
+## Version 1.0.90
+* **Date**: July 29, 2026
+* **Changes**:
+  * **Profile-based All-Macro Goal Recalculations**: Updated `updateNutrientGoals` and `Dashboard` to dynamically recalculate ALL macronutrient targets (protein based on `weightKg * 1.8`, fat, carbs) and micronutrient targets (fiber) when caloric intake is changed.
+  * **AI Supplement Macro & Micro Fetching**: Updated Gemini supplement advisor to fetch all associated micro and macro nutrients (calories, protein, carbs, fat, fiber, sodium, added sugar, iron) when looking up or adding supplements. Added an AI "✨ Auto-fill" button to supplement cards in the settings drawer.
+
 ## Version 1.0.89
 * **Date**: July 29, 2026
 * **Changes**:

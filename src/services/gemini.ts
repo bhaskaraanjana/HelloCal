@@ -286,20 +286,55 @@ Respond ONLY with the JSON object, no markdown.` }]);
     };
   },
 
-  /** Look up standard dosage/schedule for a supplement by name. */
-  async fetchSupplementInfo(name: string, access: AiAccess): Promise<{ name: string; dosage: string; schedule: string }> {
+  /** Look up standard dosage/schedule and nutrient content for a supplement by name. */
+  async fetchSupplementInfo(
+    name: string,
+    access: AiAccess
+  ): Promise<{
+    name: string;
+    dosage: string;
+    schedule: string;
+    calories?: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    addedSugar?: number;
+    fiber?: number;
+    sodium?: number;
+    iron?: number;
+  }> {
     assertAiReady(access);
     const text = await runModel(credsFrom(access), [{
-      text: `You are a clinical supplement advisor. For the supplement "${name}", return a JSON object with:
-- "name": properly capitalized full supplement name (e.g. "Vitamin D3", "Omega-3 Fish Oil", "Magnesium Glycinate")
-- "dosage": the standard recommended daily dosage as a string (e.g. "1 capsule (1000 IU)", "2 softgels (1000mg)")
-- "schedule": the optimal time, exactly one of: "Morning", "Lunch", or "Bedtime"
+      text: `You are a clinical supplement advisor. For the supplement "${name}", return a JSON object with standard dosage, schedule, and all associated micro and macro nutrients per serving (if applicable):
+- "name": properly capitalized full supplement name (e.g. "Vitamin D3", "Whey Protein", "Omega-3 Fish Oil", "Magnesium Glycinate")
+- "dosage": standard recommended daily dosage as a string (e.g. "1 scoop (30g)", "2 softgels (1000mg)")
+- "schedule": optimal time, exactly one of: "Morning", "Lunch", or "Bedtime"
+- "calories": calories in kcal per serving (number, or 0 if none)
+- "protein": protein in grams per serving (number, or 0 if none)
+- "carbs": carbohydrates in grams per serving (number, or 0 if none)
+- "fat": fat in grams per serving (number, or 0 if none)
+- "addedSugar": added sugar in grams per serving (number, or 0 if none)
+- "fiber": dietary fiber in grams per serving (number, or 0 if none)
+- "sodium": sodium in mg per serving (number, or 0 if none)
+- "iron": iron in mg per serving (number, or 0 if none)
 Respond ONLY with the JSON object, no markdown.` }]);
-    const raw = extractJSON<{ name?: unknown; dosage?: unknown; schedule?: unknown }>(text);
+    const raw = extractJSON<Record<string, unknown>>(text);
+    const numOrUndefined = (v: unknown): number | undefined => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
     return {
       name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : name,
       dosage: typeof raw.dosage === 'string' ? raw.dosage : '',
       schedule: typeof raw.schedule === 'string' ? raw.schedule : 'Morning',
+      calories: numOrUndefined(raw.calories),
+      protein: numOrUndefined(raw.protein),
+      carbs: numOrUndefined(raw.carbs),
+      fat: numOrUndefined(raw.fat),
+      addedSugar: numOrUndefined(raw.addedSugar),
+      fiber: numOrUndefined(raw.fiber),
+      sodium: numOrUndefined(raw.sodium),
+      iron: numOrUndefined(raw.iron),
     };
   },
 };

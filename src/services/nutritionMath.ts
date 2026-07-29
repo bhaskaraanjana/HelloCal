@@ -97,8 +97,10 @@ export function deriveGoals(profile: UserProfile): UserGoals | null {
   };
 }
 
-export function updateNutrientGoals(calories: number, currentGoals: UserGoals): UserGoals {
-  const protein = currentGoals.protein || 130;
+export function updateNutrientGoals(calories: number, currentGoals: UserGoals, profile?: UserProfile): UserGoals {
+  const protein = (profile && profile.weightKg && profile.weightKg > 0)
+    ? Math.round(profile.weightKg * 1.8)
+    : (currentGoals.protein || 130);
   const proteinCals = protein * 4;
   let fat = Math.round((calories * 0.25) / 9);
   if (proteinCals + fat * 9 > calories) {

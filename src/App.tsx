@@ -1230,6 +1230,7 @@ export const App: React.FC = () => {
               logs={logs}
               workouts={workouts}
               goals={goals}
+              profile={profile}
               appSettings={appSettings}
               onSaveGoals={handleSaveGoals}
               onSaveAppSettings={handleSaveAppSettings}

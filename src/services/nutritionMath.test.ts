@@ -84,9 +84,10 @@ describe('deriveGoals', () => {
 describe('updateNutrientGoals', () => {
   it('correctly updates macro limits when calorie target is changed', () => {
     const current = { calories: 2000, protein: 130, carbs: 220, fat: 65, fiber: 30 };
-    const next = updateNutrientGoals(1600, current);
+    const profile: UserProfile = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activityLevel: 'moderate' };
+    const next = updateNutrientGoals(1600, current, profile);
     expect(next.calories).toBe(1600);
-    expect(next.protein).toBe(130);
+    expect(next.protein).toBe(Math.round(80 * 1.8)); // 144g protein for 80kg weight profile
     expect(next.fiber).toBe(25); // calories < 2000 -> 25g fiber
     expect(next.fat).toBe(Math.round((1600 * 0.25) / 9)); // 44g fat
     // Carbs should fill the rest

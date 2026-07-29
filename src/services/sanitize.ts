@@ -247,6 +247,14 @@ export function sanitizeSupplements(raw: unknown): Supplement[] {
       schedule: typeof o.schedule === 'string' ? o.schedule : 'Morning',
       takenToday: o.takenToday === true,
       lastTakenTimestamp: o.lastTakenTimestamp != null ? nonNeg(o.lastTakenTimestamp) : undefined,
+      calories: o.calories != null ? nonNeg(o.calories) : undefined,
+      protein: o.protein != null ? nonNeg(o.protein) : undefined,
+      carbs: o.carbs != null ? nonNeg(o.carbs) : undefined,
+      fat: o.fat != null ? nonNeg(o.fat) : undefined,
+      addedSugar: o.addedSugar != null ? nonNeg(o.addedSugar) : undefined,
+      fiber: o.fiber != null ? nonNeg(o.fiber) : undefined,
+      sodium: o.sodium != null ? nonNeg(o.sodium) : undefined,
+      iron: o.iron != null ? nonNeg(o.iron) : undefined,
     });
   }
   return out;

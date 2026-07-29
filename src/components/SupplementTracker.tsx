@@ -92,13 +92,38 @@ export const SupplementTracker: React.FC<SupplementTrackerProps> = ({
   const takenCount = supplements.filter((s) => s.takenToday).length;
   const aiReady = isAiReady(aiAccess);
 
+  const autoFetchSupplement = async (id: string, name: string) => {
+    if (!aiReady || !name.trim()) return;
+    setBusy(true);
+    try {
+      const info = await gemini.fetchSupplementInfo(name, aiAccess);
+      updateSupplement(id, {
+        name: info.name || name,
+        dosage: info.dosage || '',
+        schedule: info.schedule || 'Morning',
+        calories: info.calories,
+        protein: info.protein,
+        carbs: info.carbs,
+        fat: info.fat,
+        addedSugar: info.addedSugar,
+        fiber: info.fiber,
+        sodium: info.sodium,
+        iron: info.iron,
+      });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Could not fetch supplement info.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const addSupplement = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = newName.trim();
     if (!n) return;
     setBusy(true);
     try {
-      let info = { name: n, dosage: '', schedule: 'Morning' };
+      let info: Partial<Awaited<ReturnType<typeof gemini.fetchSupplementInfo>>> = { name: n, dosage: '', schedule: 'Morning' };
       if (aiReady) {
         try {
           info = await gemini.fetchSupplementInfo(n, aiAccess);
@@ -112,6 +137,14 @@ export const SupplementTracker: React.FC<SupplementTrackerProps> = ({
         dosage: info.dosage || '',
         schedule: info.schedule || 'Morning',
         takenToday: false,
+        calories: info.calories,
+        protein: info.protein,
+        carbs: info.carbs,
+        fat: info.fat,
+        addedSugar: info.addedSugar,
+        fiber: info.fiber,
+        sodium: info.sodium,
+        iron: info.iron,
       };
       onSave([...supplements, supp]);
       setNewName('');
@@ -185,6 +218,17 @@ export const SupplementTracker: React.FC<SupplementTrackerProps> = ({
               <div key={s.id} style={SETTINGS_CARD}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span>
+                  {aiReady && (
+                    <button
+                      type="button"
+                      onClick={() => autoFetchSupplement(s.id, s.name)}
+                      disabled={busy}
+                      title="Fetch AI details for dose, macros & micros"
+                      style={{ ...iconBtn, width: 'auto', padding: '0 0.4rem', gap: '0.2rem', fontSize: '0.7rem', color: 'var(--accent-purple)' }}
+                    >
+                      <Sparkles size={12} /> Auto-fill
+                    </button>
+                  )}
                   <button type="button" onClick={() => remove(s.id)} aria-label={`Remove ${s.name}`} style={iconBtn}>
                     <Trash2 size={14} />
                   </button>

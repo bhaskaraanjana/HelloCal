@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { MealLog, WorkoutLog, UserGoals, AppSettings, CustomMicro, WaterLog, Supplement } from '../types/nutrition';
+import type { MealLog, WorkoutLog, UserGoals, UserProfile, AppSettings, CustomMicro, WaterLog, Supplement } from '../types/nutrition';
 import RingProgress from './ui/RingProgress';
 import ProgressBar from './ui/ProgressBar';
 import { HydrationTracker } from './HydrationTracker';
@@ -114,6 +114,7 @@ interface DashboardProps {
   logs: MealLog[];
   workouts?: WorkoutLog[];
   goals: UserGoals;
+  profile?: UserProfile;
   appSettings: AppSettings;
   onSaveGoals?: (goals: UserGoals) => void;
   onSaveAppSettings?: (settings: AppSettings) => void;
@@ -133,6 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   logs,
   workouts = [],
   goals,
+  profile,
   appSettings,
   onSaveGoals,
   onSaveAppSettings,
@@ -475,10 +477,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const iconBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-muted)', cursor: 'pointer' };
 
     if (key === 'calorieHalo') {
-      const setCal = (cal: number) => { const g = updateNutrientGoals(cal, draftGoals); setDraftGoals(g); onSaveGoals?.(g); };
+      const setCal = (cal: number) => { const g = updateNutrientGoals(cal, draftGoals, profile); setDraftGoals(g); onSaveGoals?.(g); };
       return (
         <>
-          {numInput('Base calorie target', draftGoals.calories, (n) => setDraftGoals(updateNutrientGoals(n, draftGoals)), 'kcal')}
+          {numInput('Base calorie target', draftGoals.calories, (n) => setDraftGoals(updateNutrientGoals(n, draftGoals, profile)), 'kcal')}
           <button type="button" onClick={applyGoals} className="btn btn-primary" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>Apply</button>
           <div style={{ marginTop: '0.85rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Quick goal</span>
